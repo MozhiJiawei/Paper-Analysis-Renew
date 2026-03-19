@@ -1,0 +1,36 @@
+[
+  {
+    "title": "Agentic Retrieval Planning for Long-Horizon Tasks",
+    "status": "Spotlight",
+    "id": "iclr-001",
+    "abstract": "A planning-oriented retrieval system for agent workflows.",
+    "keywords": "agents;planning;retrieval",
+    "primary_area": "foundation models",
+    "author": "Alice;Bob",
+    "aff": "OpenAI;OpenAI",
+    "pdf": "https://example.com/iclr-001.pdf",
+    "project": "https://example.com/iclr-001",
+    "github": "https://github.com/example/iclr-001",
+    "openreview": "https://openreview.net/forum?id=iclr-001"
+  },
+  {
+    "title": "Visual Correspondence at Scale",
+    "status": "Poster",
+    "id": "iclr-002",
+    "abstract": "A vision benchmark paper.",
+    "keywords": "vision;benchmark",
+    "topic": "correspondence",
+    "author_site": "Cara, Dan",
+    "aff": "Independent Lab;Independent Lab",
+    "pdf": "https://example.com/iclr-002.pdf",
+    "openreview": "https://openreview.net/forum?id=iclr-002"
+  },
+  {
+    "title": "Withdrawn Paper",
+    "status": "Withdrawn",
+    "id": "iclr-003",
+    "abstract": "Should not appear.",
+    "author": "Eve",
+    "aff": "Nowhere"
+  }
+]

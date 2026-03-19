@@ -16,60 +16,96 @@ def register(subparsers: Any) -> None:
 
     filter_parser = conference_subparsers.add_parser(
         "filter",
-        help="从固定或指定顶会论文集合中筛选符合偏好的论文",
+        help="从样例数据或 paperlists 真实会议数据中筛选顶会论文",
     )
     _add_common_arguments(filter_parser)
     filter_parser.set_defaults(handler=handle_filter)
 
     report_parser = conference_subparsers.add_parser(
         "report",
-        help="执行顶会筛选并写出 Markdown/JSON/stdout 报告",
+        help="执行顶会筛选并输出 Markdown/JSON/CSV/stdout 报告",
     )
     _add_common_arguments(report_parser)
     report_parser.set_defaults(handler=handle_report)
 
 
 def _add_common_arguments(parser: ArgumentParser) -> None:
-    parser.add_argument("--input", type=Path, help="论文样例 JSON 路径")
+    parser.add_argument("--input", type=Path, help="样例论文 JSON 路径")
     parser.add_argument("--preferences", type=Path, help="偏好配置 JSON 路径")
+    parser.add_argument("--venue", help="paperlists 会议名称，例如 iclr、neurips、cvpr")
+    parser.add_argument("--year", type=int, help="paperlists 会议年份，例如 2025")
+    parser.add_argument(
+        "--paperlists-root",
+        type=Path,
+        help="paperlists 子仓根目录，默认 third_party/paperlists",
+    )
+    parser.add_argument("--seed", type=int, default=42, help="paperlists 抽样随机种子")
 
 
 def handle_filter(args: Namespace) -> int:
     try:
-        papers, _preferences = ConferencePipeline().run(args.input, args.preferences)
+        result = ConferencePipeline().run(
+            args.input,
+            args.preferences,
+            venue=args.venue,
+            year=args.year,
+            paperlists_root=args.paperlists_root,
+            seed=args.seed,
+        )
     except CliInputError as exc:
         return print_cli_error(
             scope="conference.filter",
             message=str(exc),
-            next_step="检查 --input/--preferences 是否存在且为 UTF-8 JSON",
+            next_step="检查 --input/--preferences，或补充 --venue --year 并初始化 paperlists 子模块",
         )
 
-    if not papers:
+    if not result.papers:
         print("[OK] 未找到符合条件的顶会论文。")
         return 0
 
-    print(f"[OK] 顶会筛选完成，共 {len(papers)} 篇：")
-    for index, paper in enumerate(papers, start=1):
+    if result.source_mode == "paperlists":
+        print(
+            f"[OK] 顶会筛选完成，会议={result.venue} {result.year}，"
+            f"已录用候选 {result.candidate_count} 篇，输出 {result.selected_count} 篇，seed={result.seed}"
+        )
+        for index, paper in enumerate(result.papers, start=1):
+            print(f"{index}. {paper.title} | {paper.venue} | {paper.sampled_reason}")
+        return 0
+
+    print(f"[OK] 顶会筛选完成，共 {len(result.papers)} 篇：")
+    for index, paper in enumerate(result.papers, start=1):
         print(f"{index}. {paper.title} | score={paper.score} | org={paper.organization}")
     return 0
 
 
 def handle_report(args: Namespace) -> int:
     try:
-        papers, _preferences = ConferencePipeline().run(args.input, args.preferences)
+        result = ConferencePipeline().run(
+            args.input,
+            args.preferences,
+            venue=args.venue,
+            year=args.year,
+            paperlists_root=args.paperlists_root,
+            seed=args.seed,
+        )
     except CliInputError as exc:
         return print_cli_error(
             scope="conference.report",
             message=str(exc),
-            next_step="检查报告输入文件和偏好文件是否存在且格式正确",
+            next_step="检查报告输入文件，或补充 --venue --year 并初始化 paperlists 子模块",
         )
 
     report_dir = ARTIFACTS_DIR / "e2e" / "conference" / "latest"
+    command_name = "conference report"
+    if result.source_mode == "paperlists":
+        command_name = (
+            f"conference report --venue {args.venue} --year {args.year} --seed {args.seed}"
+        )
     artifacts = write_report(
         report_dir=report_dir,
         source_name="顶会",
-        papers=papers,
-        command_name="conference report",
+        papers=result.papers,
+        command_name=command_name,
     )
     print(f"[OK] 顶会报告已生成：{artifacts['markdown']}")
     return 0

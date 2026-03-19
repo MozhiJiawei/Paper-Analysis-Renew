@@ -12,7 +12,7 @@ ROOT_DIR = Path(__file__).resolve().parents[2]
 
 
 class ReportWriterTests(unittest.TestCase):
-    def test_write_report_creates_three_artifacts(self) -> None:
+    def test_write_report_creates_four_artifacts(self) -> None:
         report_dir = ROOT_DIR / "artifacts" / "test-output" / "report-writer"
         if report_dir.exists():
             shutil.rmtree(report_dir)
@@ -31,6 +31,11 @@ class ReportWriterTests(unittest.TestCase):
                     tags=["agents"],
                     organization="OpenAI",
                     published_at="2025-01-01",
+                    year=2025,
+                    acceptance_status="Spotlight",
+                    keywords=["agents"],
+                    pdf_url="https://example.com/p1.pdf",
+                    sampled_reason="固定种子随机抽样（seed=42）",
                     score=5.0,
                     reasons=["命中偏好主题：agents"],
                 )
@@ -40,6 +45,7 @@ class ReportWriterTests(unittest.TestCase):
 
         self.assertTrue(artifacts["markdown"].exists())
         self.assertTrue(artifacts["json"].exists())
+        self.assertTrue(artifacts["csv"].exists())
         self.assertTrue(artifacts["stdout"].exists())
 
 

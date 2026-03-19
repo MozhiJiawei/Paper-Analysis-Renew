@@ -18,7 +18,21 @@ class GoldenPathE2ETests(unittest.TestCase):
         env["PYTHONIOENCODING"] = "utf-8"
 
         result = subprocess.run(
-            [sys.executable, "-m", "paper_analysis.cli.main", "conference", "report"],
+            [
+                sys.executable,
+                "-m",
+                "paper_analysis.cli.main",
+                "conference",
+                "report",
+                "--venue",
+                "iclr",
+                "--year",
+                "2025",
+                "--paperlists-root",
+                str(ROOT_DIR / "tests" / "fixtures" / "paperlists_repo"),
+                "--seed",
+                "7",
+            ],
             cwd=ROOT_DIR,
             capture_output=True,
             text=True,
@@ -31,9 +45,11 @@ class GoldenPathE2ETests(unittest.TestCase):
 
         report_dir = ROOT_DIR / "artifacts" / "e2e" / "conference" / "latest"
         self.assertTrue((report_dir / "summary.md").exists())
+        self.assertTrue((report_dir / "result.csv").exists())
         payload = json.loads((report_dir / "result.json").read_text(encoding="utf-8"))
         self.assertEqual("顶会", payload["source"])
-        self.assertGreaterEqual(payload["count"], 1)
+        self.assertEqual(2, payload["count"])
+        self.assertIn("候选不足 10 篇", (report_dir / "stdout.txt").read_text(encoding="utf-8"))
 
     def test_arxiv_report_generates_stable_artifacts(self) -> None:
         env = os.environ.copy()

@@ -2,9 +2,7 @@
 
 ## 目标
 
-本仓库当前先交付 Agent 优先的论文筛选工程基础设施。
-
-你只需要记住两条业务链路：
+本仓库优先交付 Agent 优先的论文筛选基础设施。只需要记住两条业务链路：
 
 1. `conference`：顶会论文筛选
 2. `arxiv`：arXiv 日更筛选
@@ -20,8 +18,23 @@
 ```powershell
 py -m paper_analysis.cli.main --help
 py -m paper_analysis.cli.main conference report
+py -m paper_analysis.cli.main conference report --venue iclr --year 2025
 py -m paper_analysis.cli.main arxiv report
 py -m paper_analysis.cli.main quality local-ci
+```
+
+## paperlists 子模块
+
+顶会真实数据源来自 `third_party/paperlists` 子模块。首次使用前先初始化：
+
+```powershell
+git submodule update --init --recursive
+```
+
+如果只想在测试夹具上验证，也可以显式覆盖根目录：
+
+```powershell
+py -m paper_analysis.cli.main conference report --venue iclr --year 2025 --paperlists-root tests/fixtures/paperlists_repo
 ```
 
 ## 第一原则
@@ -29,4 +42,4 @@ py -m paper_analysis.cli.main quality local-ci
 - 中文优先
 - UTF-8 优先
 - CLI 优先
-- “推荐”不是独立产品面
+- “推荐” 不是独立产品面

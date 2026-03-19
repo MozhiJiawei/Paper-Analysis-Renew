@@ -1,0 +1,21 @@
+[
+  {
+    "title": "Robust Geometry Learning",
+    "status": "Poster",
+    "id": "cvpr-001",
+    "abstract": "Geometry reconstruction from images.",
+    "author": "Junkai Deng;Fei Hou",
+    "aff": "NUS;NUS",
+    "pdf": "https://example.com/cvpr-001.pdf",
+    "oa": "https://example.com/cvpr-001.html",
+    "github": "https://github.com/example/cvpr-001"
+  },
+  {
+    "title": "Best Paper Oral",
+    "status": "Oral",
+    "id": "cvpr-002",
+    "abstract": "A strong accepted record.",
+    "author": "Ada Lovelace",
+    "aff": "Analytical Engines Lab"
+  }
+]

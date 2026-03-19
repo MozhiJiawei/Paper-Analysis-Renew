@@ -2,16 +2,26 @@
 
 ## 新增顶会来源
 
-1. 在 `tests/fixtures/conference/` 增加稳定样例
-2. 扩展 `ConferencePipeline`
-3. 如需新动作，优先放在 `conference` 命名空间下
-4. 补充 integration/e2e 测试
-5. 更新 skill 与命令文档
+1. 优先扩展 `conference` 命名空间，不新增 `recommend`
+2. 若接入真实来源，优先放在 `paper_analysis/sources/conference/`
+3. 为来源补充最小可回归夹具，建议放在 `tests/fixtures/`
+4. 补齐 unit / integration / e2e 测试
+5. 更新 skill、命令文档和 CLI `--help`
+
+### paperlists 约定
+
+- 子模块路径固定为 `third_party/paperlists`
+- 初始化命令：
+  - `git submodule update --init --recursive`
+- 新增会议适配时：
+  - 在 `paperlists_loader.py` 增加会议别名和展示名
+  - 在 `paperlists_parser.py` 扩展字段映射或 accepted 判定
+  - 为该会议补充 fixture 和回归测试
 
 ## 新增 arXiv 筛选规则
 
 1. 优先修改共享偏好模型或排序逻辑
-2. 如确有 arXiv 特有行为，再扩展 `ArxivPipeline`
+2. 只有存在 arXiv 特有行为时，再扩展 `ArxivPipeline`
 3. 补充回归测试
 4. 更新相关文档
 

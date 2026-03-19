@@ -9,7 +9,11 @@ py -m paper_analysis.cli.main <namespace> <action> [options]
 ## conference
 
 - `conference filter`
+  - 样例模式：`conference filter --input <json>`
+  - paperlists 模式：`conference filter --venue <venue> --year <year> [--paperlists-root <path>] [--seed <int>]`
 - `conference report`
+  - 样例模式：`conference report --input <json>`
+  - paperlists 模式：`conference report --venue <venue> --year <year> [--paperlists-root <path>] [--seed <int>]`
 
 ## arxiv
 
