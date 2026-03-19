@@ -1,0 +1,8 @@
+{
+  "preferred_topics": ["agents", "reasoning", "retrieval"],
+  "preferred_subtopics": ["planning", "benchmark", "evaluation"],
+  "preferred_organizations": ["OpenAI", "Google DeepMind", "Stanford University"],
+  "excluded_topics": ["biology"],
+  "min_score": 2.0,
+  "limit": 3
+}

@@ -1,0 +1,24 @@
+[
+  {
+    "paper_id": "conf-001",
+    "title": "Agentic Retrieval Planning for Long-Horizon Tasks",
+    "abstract": "A planning-oriented retrieval system for agent workflows.",
+    "source": "conference",
+    "venue": "NeurIPS 2025",
+    "authors": ["Alice", "Bob"],
+    "tags": ["agents", "planning", "benchmark"],
+    "organization": "OpenAI",
+    "published_at": "2025-12-02"
+  },
+  {
+    "paper_id": "conf-002",
+    "title": "Visual Correspondence at Scale",
+    "abstract": "A vision benchmark paper.",
+    "source": "conference",
+    "venue": "CVPR 2025",
+    "authors": ["Cara"],
+    "tags": ["vision", "benchmark"],
+    "organization": "Independent Lab",
+    "published_at": "2025-06-12"
+  }
+]

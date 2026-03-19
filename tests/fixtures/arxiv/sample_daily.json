@@ -1,0 +1,24 @@
+[
+  {
+    "paper_id": "arxiv-001",
+    "title": "Reasoning Agents with Tool Feedback",
+    "abstract": "A daily arXiv sample focused on tool-using agents.",
+    "source": "arxiv",
+    "venue": "arXiv",
+    "authors": ["Dana", "Evan"],
+    "tags": ["agents", "reasoning", "evaluation"],
+    "organization": "Google DeepMind",
+    "published_at": "2026-03-18"
+  },
+  {
+    "paper_id": "arxiv-002",
+    "title": "Protein Structure Discovery Notes",
+    "abstract": "A biology sample that should be filtered out.",
+    "source": "arxiv",
+    "venue": "arXiv",
+    "authors": ["Frank"],
+    "tags": ["biology"],
+    "organization": "Bio Lab",
+    "published_at": "2026-03-18"
+  }
+]
