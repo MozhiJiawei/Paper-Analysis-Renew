@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <title>{{ title }}</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f5f1e8;
+      --panel: #fffdf8;
+      --text: #1f2a28;
+      --muted: #5d6a67;
+      --border: #d6c9b8;
+      --passed: #1d6b43;
+      --failed: #ab2f2f;
+      --skipped: #8a6d1f;
+      --missing: #7d4f9e;
+      --code: #f2ece1;
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Microsoft YaHei", "PingFang SC", sans-serif;
+      background: linear-gradient(180deg, #ede4d5 0%, var(--bg) 280px);
+      color: var(--text);
+      line-height: 1.6;
+    }
+    main {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 32px 20px 48px;
+    }
+    .hero, .panel {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      box-shadow: 0 10px 30px rgba(98, 73, 43, 0.08);
+      padding: 24px;
+    }
+    .hero { margin-bottom: 20px; }
+    .hero h1 { margin: 0 0 8px; font-size: 32px; }
+    .hero p { margin: 0; color: var(--muted); }
+    .status {
+      display: inline-block;
+      margin-top: 14px;
+      padding: 6px 12px;
+      border-radius: 999px;
+      font-weight: 700;
+      background: #efe7d7;
+      border: 1px solid var(--border);
+    }
+    .status-passed { color: var(--passed); }
+    .status-failed { color: var(--failed); }
+    .status-skipped { color: var(--skipped); }
+    .status-missing { color: var(--missing); }
+    .grid { display: grid; gap: 20px; }
+    .stage-grid { grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
+    .panel h2 { margin-top: 0; font-size: 24px; }
+    .muted { color: var(--muted); }
+    .kpi {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      margin-top: 16px;
+    }
+    .kpi span {
+      background: #f8f3ea;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 8px 12px;
+    }
+    .card {
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 18px;
+      background: #fffaf1;
+    }
+    .card h3 { margin-top: 0; }
+    pre {
+      white-space: pre-wrap;
+      word-break: break-word;
+      background: var(--code);
+      border: 1px solid #e4d8c6;
+      border-radius: 12px;
+      padding: 14px;
+      overflow-x: auto;
+    }
+    code { font-family: Consolas, "Courier New", monospace; }
+    details { margin-top: 12px; }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 12px;
+    }
+    th, td {
+      text-align: left;
+      padding: 10px 8px;
+      border-bottom: 1px solid #eadfce;
+      vertical-align: top;
+    }
+    .pill {
+      display: inline-block;
+      padding: 2px 10px;
+      border-radius: 999px;
+      border: 1px solid currentColor;
+      font-size: 13px;
+      font-weight: 700;
+    }
+    .section-stack {
+      display: grid;
+      gap: 20px;
+      margin-top: 20px;
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <section class="hero">
+      <h1>{{ title }}</h1>
+      <p>面向人工审核的本地 CI 汇总页，整合质量门禁与 e2e 推荐报告。</p>
+      <div class="status status-{{ overall_status }}">整体结果：{{ overall_status_label }}</div>
+      <div class="kpi">
+        <span>阶段数：{{ total_stages }}</span>
+        <span>通过：{{ passed_count }}</span>
+        <span>失败：{{ failed_count }}</span>
+        <span>未执行：{{ skipped_count }}</span>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h2>测试阶段</h2>
+      <div class="grid stage-grid">
+        {% for result in stage_results %}
+        <article class="card">
+          <h3>{{ result.stage_name }}</h3>
+          <div class="pill status-{{ result.status }}">{{ result.status_label }}</div>
+          <p>{{ result.description }}</p>
+          <p><strong>摘要：</strong>{{ result.summary }}</p>
+          <p><strong>Artifact：</strong><code>{{ result.artifact_path }}</code></p>
+          <details>
+            <summary>查看执行过程</summary>
+            <pre>{{ result.output }}</pre>
+          </details>
+        </article>
+        {% endfor %}
+      </div>
+    </section>
+
+    <section class="panel section-stack">
+      <div>
+        <h2>e2e 推荐报告</h2>
+        <p class="muted">优先展示结构化 result.json，并补充 summary.md 与 stdout.txt 供人工复核。</p>
+      </div>
+      {% for section in e2e_sections %}
+      <article class="card">
+        <h3>{{ section.source_name }}报告</h3>
+        <div class="pill status-{{ section.status }}">{{ section.status_label }}</div>
+        <p><strong>目录：</strong><code>{{ section.report_dir }}</code></p>
+        <p><strong>推荐数量：</strong>{{ section.count }}</p>
+        {% if section.note %}
+        <p><strong>说明：</strong>{{ section.note }}</p>
+        {% endif %}
+        <table>
+          <thead>
+            <tr>
+              <th>标题</th>
+              <th>作者</th>
+              <th>机构</th>
+              <th>来源</th>
+              <th>原因</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% if section.papers %}
+              {% for paper in section.papers %}
+              <tr>
+                <td>{{ paper.get("title", "") }}</td>
+                <td>{{ paper.get("authors", "") }}</td>
+                <td>{{ paper.get("organization", "") }}</td>
+                <td>{{ paper.get("venue", paper.get("source", "")) }}</td>
+                <td>
+                  {% set reasons = paper.get("reasons", []) %}
+                  {% if reasons %}
+                    {{ "；".join(reasons) }}
+                  {% else %}
+                    {{ paper.get("sampled_reason", "") or "无" }}
+                  {% endif %}
+                </td>
+              </tr>
+              {% endfor %}
+            {% else %}
+              <tr>
+                <td colspan="5" class="muted">暂无可展示的推荐结果。</td>
+              </tr>
+            {% endif %}
+          </tbody>
+        </table>
+        <details>
+          <summary>查看 summary.md</summary>
+          <pre>{{ section.summary_markdown.strip() or "无 Markdown 摘要。" }}</pre>
+        </details>
+        <details>
+          <summary>查看 stdout.txt</summary>
+          <pre>{{ section.stdout.strip() or "无 stdout 输出。" }}</pre>
+        </details>
+      </article>
+      {% endfor %}
+    </section>
+  </main>
+</body>
+</html>
