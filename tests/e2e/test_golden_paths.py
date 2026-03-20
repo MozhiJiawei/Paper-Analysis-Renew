@@ -69,17 +69,29 @@ class GoldenPathE2ETests(CaseMetadataMixin, unittest.TestCase):
         self.record_step("检查 stdout.txt 含候选不足提示，确认文本产物内容稳定。")
 
     def test_arxiv_report_generates_stable_artifacts(self) -> None:
-        """验证 arXiv report 黄金链路能稳定生成结构化产物。"""
+        """验证 arXiv report 订阅 API 黄金链路能稳定生成结构化产物。"""
 
         self.set_case_source_label("arxiv e2e")
-        self.set_failure_check_description("CLI 返回码非 0，或 arXiv 报告缺少 summary/result/stdout 关键产物时判定失败。")
+        self.set_failure_check_description("CLI 返回码非 0，或联网 arXiv 报告缺少关键产物时判定失败。")
         env = os.environ.copy()
         env["PYTHONUTF8"] = "1"
         env["PYTHONIOENCODING"] = "utf-8"
         self.record_step("准备 arxiv report 命令与 UTF-8 子进程环境。")
 
         result = subprocess.run(
-            [sys.executable, "-m", "paper_analysis.cli.main", "arxiv", "report"],
+            [
+                sys.executable,
+                "-m",
+                "paper_analysis.cli.main",
+                "arxiv",
+                "report",
+                "--source-mode",
+                "subscription-api",
+                "--subscription-date",
+                "2025-09/09-01",
+                "--max-results",
+                "10",
+            ],
             cwd=ROOT_DIR,
             capture_output=True,
             text=True,
@@ -94,14 +106,20 @@ class GoldenPathE2ETests(CaseMetadataMixin, unittest.TestCase):
         report_dir = ROOT_DIR / "artifacts" / "e2e" / "arxiv" / "latest"
         self.add_case_artifact(str(report_dir / "summary.md"))
         self.add_case_artifact(str(report_dir / "result.json"))
+        self.add_case_artifact(str(report_dir / "result.csv"))
         self.add_case_artifact(str(report_dir / "stdout.txt"))
         self.record_step("校验 arXiv 报告目录中的关键产物存在。")
         self.assertTrue((report_dir / "summary.md").exists())
+        self.assertTrue((report_dir / "result.csv").exists())
         payload = json.loads((report_dir / "result.json").read_text(encoding="utf-8"))
         self.record_step(f"读取 result.json，确认 source={payload['source']}，count={payload['count']}。")
         self.assertEqual("arXiv", payload["source"])
         self.assertGreaterEqual(payload["count"], 1)
-        self.record_step("确认 arXiv 推荐结果数量至少为 1。")
+        first_paper = payload["papers"][0]
+        self.assertTrue(first_paper["paper_id"])
+        self.assertTrue(first_paper["title"])
+        self.assertTrue(first_paper["published_at"])
+        self.record_step("确认 arXiv 联网结果至少包含一篇结构完整的论文。")
 
     def test_ci_html_report_renders_recommendations_from_real_e2e_artifacts(self) -> None:
         """验证 CI HTML 能消费真实 e2e 产物并渲染推荐结果。"""
@@ -126,7 +144,21 @@ class GoldenPathE2ETests(CaseMetadataMixin, unittest.TestCase):
                 "7",
             ]
         )
-        self._run_report([sys.executable, "-m", "paper_analysis.cli.main", "arxiv", "report"])
+        self._run_report(
+            [
+                sys.executable,
+                "-m",
+                "paper_analysis.cli.main",
+                "arxiv",
+                "report",
+                "--source-mode",
+                "subscription-api",
+                "--subscription-date",
+                "2025-09/09-01",
+                "--max-results",
+                "10",
+            ]
+        )
         self.record_step("基于真实产物调用 CI HTML writer 生成 local-ci 审核页。")
 
         report_dir = ROOT_DIR / "artifacts" / "test-output" / "e2e-ci-html"
@@ -156,9 +188,10 @@ class GoldenPathE2ETests(CaseMetadataMixin, unittest.TestCase):
         )
 
         html = report_path.read_text(encoding="utf-8")
-        self.record_step("读取 local-ci-latest.html，检查两类推荐论文标题和 E2E 报告附件区块是否存在。")
+        self.record_step("读取 local-ci-latest.html，检查顶会标题、arXiv 区块和 E2E 报告附件是否存在。")
         self.assertIn("Agentic Retrieval Planning for Long-Horizon Tasks", html)
-        self.assertIn("Reasoning Agents with Tool Feedback", html)
+        self.assertIn("arXiv", html)
+        self.assertIn("--source-mode subscription-api", html)
         self.assertIn("E2E 报告附件", html)
 
     def _run_report(self, command: list[str]) -> None:

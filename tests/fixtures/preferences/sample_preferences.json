@@ -4,5 +4,5 @@
   "preferred_organizations": ["OpenAI", "Google DeepMind", "Stanford University"],
   "excluded_topics": ["biology"],
   "min_score": 2.0,
-  "limit": 3
+  "limit": 10
 }

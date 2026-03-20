@@ -2,12 +2,12 @@
 
 ## 当前策略
 
-当前仓库优先保证“零第三方测试依赖也能跑通基础门禁”。
-因此基础实现采用：
-- `unittest` 负责单元、集成、e2e 测试
-- 自定义 `lint` 脚本检查 UTF-8、行尾空格、制表符和结尾换行
-- 自定义 `typecheck` 脚本检查公开函数的类型注解边界
-- `Jinja2` 负责静态 HTML 审核页模板渲染
+当前仓库的质量门禁以 `unittest` 和自定义质量脚本为基础，统一通过稳定的 CLI 入口执行。
+
+- `unittest` 负责 unit、integration、e2e 测试
+- `lint` 脚本检查 UTF-8、行尾空格、制表符和文件结尾换行
+- `typecheck` 脚本检查公开函数的类型注解边界
+- `Jinja2` 负责静态 HTML 审核页渲染
 
 ## 统一入口
 
@@ -16,21 +16,35 @@ py -m paper_analysis.cli.main quality local-ci
 ```
 
 执行顺序：
+
 1. `lint`
 2. `typecheck`
 3. `unit`
 4. `integration`
 5. `e2e`
 
-执行完成后，除终端输出外，还会生成供人工审核的 HTML 汇总页：
+执行完成后，除了终端输出，还会生成供人工审核的 HTML 汇总页：
 
 ```text
 artifacts/quality/local-ci-latest.html
 ```
 
-该页面会展示：
+## arXiv 联网 e2e 约定
+
+`tests/e2e/` 中的 arXiv 黄金路径默认真实访问 arXiv 官方 API。这是仓库当前的明确要求，不是可选检查。
+
+- `quality local-ci` 默认运行联网 arXiv e2e
+- 执行环境默认假设外网稳定可达
+- arXiv e2e 的目标是验证真实订阅抓取、结构化产物写出，以及 CI HTML 对真实产物的消费链路
+- 断言应尽量关注来源、数量下限、关键字段存在性和产物稳定性，避免依赖易漂移的固定标题
+- 联网实现必须遵守 arXiv API 的单连接、低频请求约束
+
+## HTML 审核页
+
+HTML 审核页会展示：
+
 - 三大类点灯视图：`质量检查`、`单元测试`、`E2E 测试`
-- 每个用例的通过/失败/未执行状态
+- 每个用例的通过 / 失败 / 未执行状态
 - 每个用例的描述、失败判定说明、过程日志、结果日志
 - 阶段级原始输出
 - `conference` / `arXiv` 的 e2e 报告附件
@@ -64,7 +78,8 @@ artifacts/quality/
 ```
 
 其中：
-- `*-latest.txt` 保留每个阶段的原始 stdout/stderr
+
+- `*-latest.txt` 保留每个阶段的原始 stdout / stderr
 - `*-cases-latest.json` 保留该阶段的逐用例结构化结果
 - `local-ci-latest.html` 用于人工审核
 
@@ -78,11 +93,11 @@ artifacts/quality/
 
 - `tests/unit/`：共享领域模型、排序逻辑、报告写入等纯逻辑
 - `tests/integration/`：CLI 与 pipeline 的跨层协作
-- `tests/e2e/`：顶会与 arXiv 两条黄金路径，以及审核页消费真实产物的链路
+- `tests/e2e/`：顶会链路、arXiv 联网订阅链路，以及审核页消费真实产物的链路
 
 ## 后续演进
 
-当环境允许安装依赖后，可以把门禁平滑切换到：
+当环境允许安装更多依赖后，可以逐步切换到：
 
 - `pytest`
 - `ruff`

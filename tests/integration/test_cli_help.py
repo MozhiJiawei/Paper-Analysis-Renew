@@ -34,6 +34,29 @@ class CliHelpTests(unittest.TestCase):
         self.assertIn("arxiv", result.stdout)
         self.assertNotIn("recommend", result.stdout)
 
+    def test_arxiv_help_lists_subscription_options(self) -> None:
+        """验证 arxiv 帮助页暴露订阅 API 参数。"""
+
+        env = os.environ.copy()
+        env["PYTHONUTF8"] = "1"
+        env["PYTHONIOENCODING"] = "utf-8"
+
+        result = subprocess.run(
+            [sys.executable, "-m", "paper_analysis.cli.main", "arxiv", "report", "--help"],
+            cwd=ROOT_DIR,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            env=env,
+            check=False,
+        )
+
+        self.assertEqual(0, result.returncode)
+        self.assertIn("--source-mode", result.stdout)
+        self.assertIn("--subscription-date", result.stdout)
+        self.assertIn("--max-results", result.stdout)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -18,7 +18,11 @@ py -m paper_analysis.cli.main <namespace> <action> [options]
 ## arxiv
 
 - `arxiv daily-filter`
+  - 样例模式：`arxiv daily-filter --input <json>`
+  - 订阅 API 模式：`arxiv daily-filter --source-mode subscription-api --subscription-date <YYYY-MM/MM-DD> [--category <term>]... [--max-results <int>]`
 - `arxiv report`
+  - 样例模式：`arxiv report --input <json>`
+  - 订阅 API 模式：`arxiv report --source-mode subscription-api --subscription-date <YYYY-MM/MM-DD> [--category <term>]... [--max-results <int>]`
 
 ## quality
 
@@ -37,4 +41,5 @@ py -m paper_analysis.cli.main <namespace> <action> [options]
 ## 约束
 
 - 业务入口只允许 `conference` 和 `arxiv`
-- 偏好筛选属于共享内部能力，不单独暴露为 `recommend`
+- “推荐 / 排序”不是独立命名空间
+- arXiv CLI 当前默认展示抓取结果，不在命令入口执行偏好筛选

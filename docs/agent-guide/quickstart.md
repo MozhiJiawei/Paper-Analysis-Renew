@@ -2,10 +2,10 @@
 
 ## 目标
 
-本仓库优先交付 Agent 优先的论文筛选基础设施。只需要记住两条业务链路：
+本仓库优先交付 Agent 优先的论文处理基础设施。只需要记住两条业务链路：
 
 1. `conference`：顶会论文筛选
-2. `arxiv`：arXiv 日更筛选
+2. `arxiv`：arXiv 日更抓取与报告
 
 ## 先读什么
 
@@ -42,4 +42,5 @@ py -m paper_analysis.cli.main conference report --venue iclr --year 2025 --paper
 - 中文优先
 - UTF-8 优先
 - CLI 优先
-- “推荐” 不是独立产品面
+- “推荐”不是独立产品面
+- arXiv subscription-api 默认展示抓取到的前 10 条结果
