@@ -12,6 +12,8 @@ ROOT_DIR = Path(__file__).resolve().parents[2]
 
 class CliHelpTests(unittest.TestCase):
     def test_main_help_lists_business_namespaces(self) -> None:
+        """验证主命令帮助页只暴露 conference 与 arxiv 两个业务命名空间。"""
+
         env = os.environ.copy()
         env["PYTHONUTF8"] = "1"
         env["PYTHONIOENCODING"] = "utf-8"

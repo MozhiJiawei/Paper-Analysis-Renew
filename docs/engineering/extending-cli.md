@@ -15,7 +15,7 @@
   - `git submodule update --init --recursive`
 - 新增会议适配时：
   - 在 `paperlists_loader.py` 增加会议别名和展示名
-  - 在 `paperlists_parser.py` 扩展字段映射或 accepted 判定
+  - 在 `paperlists_parser.py` 扩展字段映射和 accepted 判定
   - 为该会议补充 fixture 和回归测试
 
 ## 新增 arXiv 筛选规则
@@ -30,11 +30,12 @@
 1. 在 `paper_analysis/cli/quality.py` 注册阶段
 2. 在 `scripts/quality/` 或 `tests/` 中补对应实现
 3. 更新 `docs/engineering/testing-and-quality.md`
+4. 如果新增或修改质量产物，同时更新 `docs/engineering/encoding-and-output.md`
+5. 如果 HTML 审核页的展示契约变化，同时维护逐用例结构化产物契约
 
 ## 维护 skill
 
 以下变化必须同步更新 `.codex/skills/paper-analysis/`：
-
 - 命令面变化
 - 工作流变化
 - 文档入口变化

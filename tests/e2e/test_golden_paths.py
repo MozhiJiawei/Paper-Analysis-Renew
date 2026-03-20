@@ -2,22 +2,29 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import subprocess
 import sys
 import unittest
 from pathlib import Path
 
 from paper_analysis.services.ci_html_writer import QualityStageResult, write_ci_html_report
+from paper_analysis.testing.case_metadata import CaseMetadataMixin
 
 
 ROOT_DIR = Path(__file__).resolve().parents[2]
 
 
-class GoldenPathE2ETests(unittest.TestCase):
+class GoldenPathE2ETests(CaseMetadataMixin, unittest.TestCase):
     def test_conference_report_generates_stable_artifacts(self) -> None:
+        """验证 conference report 黄金链路能稳定生成结构化产物。"""
+
+        self.set_case_source_label("conference e2e")
+        self.set_failure_check_description("CLI 返回码非 0，或 summary/result/csv/stdout 任一关键产物缺失时判定失败。")
         env = os.environ.copy()
         env["PYTHONUTF8"] = "1"
         env["PYTHONIOENCODING"] = "utf-8"
+        self.record_step("准备 conference report 命令与 UTF-8 子进程环境。")
 
         result = subprocess.run(
             [
@@ -43,20 +50,33 @@ class GoldenPathE2ETests(unittest.TestCase):
             env=env,
             check=False,
         )
+        self.record_step(f"执行 conference report，返回码={result.returncode}。")
         self.assertEqual(0, result.returncode)
 
         report_dir = ROOT_DIR / "artifacts" / "e2e" / "conference" / "latest"
+        self.add_case_artifact(str(report_dir / "summary.md"))
+        self.add_case_artifact(str(report_dir / "result.json"))
+        self.add_case_artifact(str(report_dir / "result.csv"))
+        self.add_case_artifact(str(report_dir / "stdout.txt"))
+        self.record_step("校验 summary.md、result.csv、result.json、stdout.txt 已生成。")
         self.assertTrue((report_dir / "summary.md").exists())
         self.assertTrue((report_dir / "result.csv").exists())
         payload = json.loads((report_dir / "result.json").read_text(encoding="utf-8"))
+        self.record_step(f"读取 result.json，确认 source={payload['source']}，count={payload['count']}。")
         self.assertEqual("顶会", payload["source"])
         self.assertEqual(2, payload["count"])
         self.assertIn("候选不足 10 篇", (report_dir / "stdout.txt").read_text(encoding="utf-8"))
+        self.record_step("检查 stdout.txt 含候选不足提示，确认文本产物内容稳定。")
 
     def test_arxiv_report_generates_stable_artifacts(self) -> None:
+        """验证 arXiv report 黄金链路能稳定生成结构化产物。"""
+
+        self.set_case_source_label("arxiv e2e")
+        self.set_failure_check_description("CLI 返回码非 0，或 arXiv 报告缺少 summary/result/stdout 关键产物时判定失败。")
         env = os.environ.copy()
         env["PYTHONUTF8"] = "1"
         env["PYTHONIOENCODING"] = "utf-8"
+        self.record_step("准备 arxiv report 命令与 UTF-8 子进程环境。")
 
         result = subprocess.run(
             [sys.executable, "-m", "paper_analysis.cli.main", "arxiv", "report"],
@@ -68,15 +88,27 @@ class GoldenPathE2ETests(unittest.TestCase):
             env=env,
             check=False,
         )
+        self.record_step(f"执行 arxiv report，返回码={result.returncode}。")
         self.assertEqual(0, result.returncode)
 
         report_dir = ROOT_DIR / "artifacts" / "e2e" / "arxiv" / "latest"
+        self.add_case_artifact(str(report_dir / "summary.md"))
+        self.add_case_artifact(str(report_dir / "result.json"))
+        self.add_case_artifact(str(report_dir / "stdout.txt"))
+        self.record_step("校验 arXiv 报告目录中的关键产物存在。")
         self.assertTrue((report_dir / "summary.md").exists())
         payload = json.loads((report_dir / "result.json").read_text(encoding="utf-8"))
+        self.record_step(f"读取 result.json，确认 source={payload['source']}，count={payload['count']}。")
         self.assertEqual("arXiv", payload["source"])
         self.assertGreaterEqual(payload["count"], 1)
+        self.record_step("确认 arXiv 推荐结果数量至少为 1。")
 
     def test_ci_html_report_renders_recommendations_from_real_e2e_artifacts(self) -> None:
+        """验证 CI HTML 能消费真实 e2e 产物并渲染推荐结果。"""
+
+        self.set_case_source_label("ci html e2e")
+        self.set_failure_check_description("若 HTML 未包含真实 e2e 推荐结果或关键区块缺失，则判定失败。")
+        self.record_step("先生成 conference 与 arXiv 的真实 e2e 报告产物。")
         self._run_report(
             [
                 sys.executable,
@@ -95,8 +127,13 @@ class GoldenPathE2ETests(unittest.TestCase):
             ]
         )
         self._run_report([sys.executable, "-m", "paper_analysis.cli.main", "arxiv", "report"])
+        self.record_step("基于真实产物调用 CI HTML writer 生成 local-ci 审核页。")
 
-        report_path = ROOT_DIR / "artifacts" / "quality" / "local-ci-latest.html"
+        report_dir = ROOT_DIR / "artifacts" / "test-output" / "e2e-ci-html"
+        if report_dir.exists():
+            shutil.rmtree(report_dir)
+        report_path = report_dir / "local-ci-latest.html"
+        self.add_case_artifact(str(report_path))
         write_ci_html_report(
             report_path=report_path,
             stage_results=[
@@ -119,9 +156,10 @@ class GoldenPathE2ETests(unittest.TestCase):
         )
 
         html = report_path.read_text(encoding="utf-8")
+        self.record_step("读取 local-ci-latest.html，检查两类推荐论文标题和 E2E 报告附件区块是否存在。")
         self.assertIn("Agentic Retrieval Planning for Long-Horizon Tasks", html)
         self.assertIn("Reasoning Agents with Tool Feedback", html)
-        self.assertIn("e2e 推荐报告", html)
+        self.assertIn("E2E 报告附件", html)
 
     def _run_report(self, command: list[str]) -> None:
         env = os.environ.copy()

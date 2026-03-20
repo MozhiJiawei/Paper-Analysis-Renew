@@ -15,16 +15,22 @@ ROOT_DIR = Path(__file__).resolve().parents[2]
 
 class PipelineIntegrationTests(unittest.TestCase):
     def test_conference_pipeline_returns_ranked_results(self) -> None:
+        """验证 conference pipeline 默认运行时会返回满足最低分阈值的排序结果。"""
+
         result = ConferencePipeline().run()
         self.assertGreaterEqual(len(result.papers), 1)
         self.assertGreaterEqual(result.papers[0].score, result.preferences.min_score)
 
     def test_arxiv_pipeline_returns_ranked_results(self) -> None:
+        """验证 arXiv pipeline 默认运行时会返回满足最低分阈值的排序结果。"""
+
         papers, preferences = ArxivPipeline().run()
         self.assertGreaterEqual(len(papers), 1)
         self.assertGreaterEqual(papers[0].score, preferences.min_score)
 
     def test_conference_pipeline_reads_paperlists_fixture(self) -> None:
+        """验证 conference pipeline 能从 paperlists fixture 读取真实会议数据。"""
+
         result = ConferencePipeline().run(
             venue="iclr",
             year=2025,
@@ -40,6 +46,8 @@ class PipelineIntegrationTests(unittest.TestCase):
         self.assertTrue(all(paper.acceptance_status for paper in result.papers))
 
     def test_conference_filter_returns_structured_error_for_missing_input(self) -> None:
+        """验证 conference filter 在输入文件缺失时返回结构化失败输出而非 Traceback。"""
+
         env = os.environ.copy()
         env["PYTHONUTF8"] = "1"
         env["PYTHONIOENCODING"] = "utf-8"
@@ -69,6 +77,8 @@ class PipelineIntegrationTests(unittest.TestCase):
         self.assertNotIn("Traceback", result.stdout + result.stderr)
 
     def test_conference_report_returns_structured_error_for_missing_paperlists_root(self) -> None:
+        """验证 conference report 在 paperlists 数据源缺失时返回结构化失败输出。"""
+
         env = os.environ.copy()
         env["PYTHONUTF8"] = "1"
         env["PYTHONIOENCODING"] = "utf-8"

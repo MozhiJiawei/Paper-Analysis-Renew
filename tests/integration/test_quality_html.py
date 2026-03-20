@@ -13,6 +13,8 @@ from paper_analysis.cli import quality
 
 class QualityHtmlIntegrationTests(unittest.TestCase):
     def test_handle_local_ci_writes_html_on_success(self) -> None:
+        """验证 quality local-ci 成功时会写出包含三大类的 HTML 审核页。"""
+
         with tempfile.TemporaryDirectory() as temp_dir:
             root_dir = Path(temp_dir)
             artifacts_dir = root_dir / "artifacts"
@@ -29,20 +31,28 @@ class QualityHtmlIntegrationTests(unittest.TestCase):
                         ("unit", [sys.executable, "-c", "print('unit ok')"]),
                     ],
                 ),
+                patch.object(quality, "UNITTEST_STAGE_CONFIG", {}),
             ):
                 exit_code = quality.handle_local_ci(Namespace())
 
             self.assertEqual(0, exit_code)
             html = (artifacts_dir / "quality" / "local-ci-latest.html").read_text(encoding="utf-8")
             self.assertIn("整体结果：通过", html)
+            self.assertIn("质量检查", html)
+            self.assertIn("单元测试", html)
+            self.assertIn("用例过程", html)
             self.assertIn("lint ok", html)
             self.assertIn("Reasoning Agents with Tool Feedback", html)
 
-    def test_handle_local_ci_writes_html_on_failure_and_marks_skipped_stages(self) -> None:
+    def test_handle_local_ci_writes_html_on_failure_and_marks_skipped_cases(self) -> None:
+        """验证 quality local-ci 失败时仍写出 HTML，并把后续用例标记为未执行。"""
+
         with tempfile.TemporaryDirectory() as temp_dir:
             root_dir = Path(temp_dir)
             artifacts_dir = root_dir / "artifacts"
             self._write_e2e_payloads(artifacts_dir)
+            self._write_discoverable_test(root_dir / "tests" / "unit" / "test_dummy.py", "DummyUnitTests")
+            self._write_discoverable_test(root_dir / "tests" / "e2e" / "test_dummy.py", "DummyE2ETests")
 
             with (
                 patch.object(quality, "ROOT_DIR", root_dir),
@@ -52,9 +62,17 @@ class QualityHtmlIntegrationTests(unittest.TestCase):
                     "QUALITY_STAGES",
                     [
                         ("lint", [sys.executable, "-c", "import sys; print('lint failed'); sys.exit(1)"]),
-                        ("unit", [sys.executable, "-c", "print('unit ok')"]),
-                        ("e2e", [sys.executable, "-c", "print('e2e ok')"]),
+                        ("unit", []),
+                        ("e2e", []),
                     ],
+                ),
+                patch.object(
+                    quality,
+                    "UNITTEST_STAGE_CONFIG",
+                    {
+                        "unit": {"start_dir": "tests/unit", "pattern": "test_*.py"},
+                        "e2e": {"start_dir": "tests/e2e", "pattern": "test_*.py"},
+                    },
                 ),
             ):
                 exit_code = quality.handle_local_ci(Namespace())
@@ -63,9 +81,11 @@ class QualityHtmlIntegrationTests(unittest.TestCase):
             html = (artifacts_dir / "quality" / "local-ci-latest.html").read_text(encoding="utf-8")
             self.assertIn("整体结果：失败", html)
             self.assertIn("lint failed", html)
-            self.assertIn("前置阶段失败，本阶段未执行", html)
+            self.assertIn("前置阶段失败，本用例未执行。", html)
 
     def test_handle_local_ci_still_writes_html_when_e2e_json_is_invalid(self) -> None:
+        """验证 e2e 的 result.json 非法时，quality local-ci 仍会生成 HTML。"""
+
         with tempfile.TemporaryDirectory() as temp_dir:
             root_dir = Path(temp_dir)
             artifacts_dir = root_dir / "artifacts"
@@ -80,6 +100,7 @@ class QualityHtmlIntegrationTests(unittest.TestCase):
                 patch.object(quality, "ROOT_DIR", root_dir),
                 patch.object(quality, "ARTIFACTS_DIR", artifacts_dir),
                 patch.object(quality, "QUALITY_STAGES", list(commands.items())),
+                patch.object(quality, "UNITTEST_STAGE_CONFIG", {}),
             ):
                 exit_code = quality.handle_local_ci(Namespace())
 
@@ -134,6 +155,26 @@ class QualityHtmlIntegrationTests(unittest.TestCase):
                 },
                 ensure_ascii=False,
                 indent=2,
+            ),
+            encoding="utf-8",
+        )
+
+    def _write_discoverable_test(self, path: Path, class_name: str) -> None:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(
+            "\n".join(
+                [
+                    "import unittest",
+                    "",
+                    f"class {class_name}(unittest.TestCase):",
+                    "    def test_placeholder(self):",
+                    '        """占位测试，用于验证 skipped 用例采集。"""',
+                    "        self.assertTrue(True)",
+                    "",
+                    "",
+                    "if __name__ == '__main__':",
+                    "    unittest.main()",
+                ]
             ),
             encoding="utf-8",
         )

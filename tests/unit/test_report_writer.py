@@ -13,6 +13,8 @@ ROOT_DIR = Path(__file__).resolve().parents[2]
 
 class ReportWriterTests(unittest.TestCase):
     def test_write_report_creates_four_artifacts(self) -> None:
+        """验证报告写入器会同时生成 Markdown、JSON、CSV 和 stdout 四类产物。"""
+
         report_dir = ROOT_DIR / "artifacts" / "test-output" / "report-writer"
         if report_dir.exists():
             shutil.rmtree(report_dir)

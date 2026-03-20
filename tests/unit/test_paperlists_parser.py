@@ -16,6 +16,8 @@ ROOT_DIR = Path(__file__).resolve().parents[2]
 
 class PaperlistsParserTests(unittest.TestCase):
     def test_filter_and_normalize_records(self) -> None:
+        """验证 paperlists 原始记录能被过滤并标准化为论文对象。"""
+
         source_path = ROOT_DIR / "tests" / "fixtures" / "paperlists_repo" / "iclr" / "iclr2025.json"
         raw_records = load_raw_records(source_path, "ICLR", 2025)
 
@@ -31,6 +33,8 @@ class PaperlistsParserTests(unittest.TestCase):
         self.assertEqual("OpenAI", papers[0].organization)
 
     def test_sampler_is_stable_with_seed(self) -> None:
+        """验证固定 seed 时抽样结果稳定且保留抽样原因。"""
+
         source_path = ROOT_DIR / "tests" / "fixtures" / "paperlists_repo" / "iclr" / "iclr2025.json"
         raw_records = load_raw_records(source_path, "ICLR", 2025)
         papers = normalize_records(filter_accepted_records(raw_records))
