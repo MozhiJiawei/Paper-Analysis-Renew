@@ -8,7 +8,7 @@ from paper_analysis.cli import arxiv, conference, quality, report
 def build_parser() -> ArgumentParser:
     parser = ArgumentParser(
         prog="paper-analysis",
-        description="Agent-first paper filtering CLI",
+        description="Agent-first paper filtering CLI with stable conference/arxiv/quality/report entrypoints",
     )
     subparsers = parser.add_subparsers(dest="namespace", required=True)
     conference.register(subparsers)

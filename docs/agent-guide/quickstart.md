@@ -23,6 +23,23 @@ py -m paper_analysis.cli.main arxiv report
 py -m paper_analysis.cli.main quality local-ci
 ```
 
+## 自然语言如何落到命令
+
+当人类直接对 Codex 说自然语言时，默认按下面的稳定入口分流：
+
+- “帮我筛 ICLR 2025 论文” -> `conference filter` 或 `conference report`
+- “帮我看今天的 arXiv AI 更新” -> `arxiv daily-filter` 或 `arxiv report`
+- “跑一下本地检查” -> `quality local-ci`
+- “看最近一次顶会报告” -> `report --source conference`
+
+缺少关键参数时，只追问必要信息：
+
+- `conference` 缺会议名或年份时追问
+- `arxiv` 在 `subscription-api` 模式下缺订阅日期时追问
+- `report` 缺来源时追问 `conference` 或 `arxiv`
+
+不要新增 `recommend` 命名空间。
+
 ## paperlists 子模块
 
 顶会真实数据源来自 `third_party/paperlists` 子模块。首次使用前先初始化：

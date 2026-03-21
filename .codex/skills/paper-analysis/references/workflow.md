@@ -1,5 +1,12 @@
 # 工作流摘要
 
+先做意图分流，再执行稳定 CLI：
+
+1. 识别用户属于 `conference`、`arxiv`、`quality` 还是 `report`
+2. 缺少关键参数时只追问必要信息
+3. 参数齐全后执行现有命令
+4. 输出终端摘要与报告产物
+
 ## 顶会筛选
 
 1. 载入顶会样例或指定输入
@@ -41,3 +48,10 @@ py -m paper_analysis.cli.main quality local-ci
 3. `unit`
 4. `integration`
 5. `e2e`
+
+## 最近报告
+
+```powershell
+py -m paper_analysis.cli.main report --source conference
+py -m paper_analysis.cli.main report --source arxiv
+```

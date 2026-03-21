@@ -38,6 +38,15 @@ py -m paper_analysis.cli.main <namespace> <action> [options]
 - `report --source conference`
 - `report --source arxiv`
 
+## 意图到命令
+
+- 顶会筛选类请求 -> `conference filter` / `conference report`
+- arXiv 日更或订阅类请求 -> `arxiv daily-filter` / `arxiv report`
+- 质量检查或回归请求 -> `quality local-ci`
+- 最近报告查看请求 -> `report --source <conference|arxiv>`
+
+默认只映射到现有四个顶层命名空间；缺少关键参数时只做最小追问。
+
 ## 约束
 
 - 业务入口只允许 `conference` 和 `arxiv`

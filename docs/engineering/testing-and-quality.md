@@ -39,6 +39,30 @@ artifacts/quality/local-ci-latest.html
 - 断言应尽量关注来源、数量下限、关键字段存在性和产物稳定性，避免依赖易漂移的固定标题
 - 联网实现必须遵守 arXiv API 的单连接、低频请求约束
 
+## Codex 自然语言 e2e 约定
+
+除了直接调用 CLI 的 arXiv 黄金路径，本仓库还要求保留一条面向 Codex 的黑盒 e2e：
+
+- 通过 `codex exec --json` 运行
+- prompt 不直接点名 skill，不手工给出 CLI 命令
+- prompt 必须采用人类自然表达，只描述目标任务
+- 用例目标是验证 Codex 在仓库内发现并使用 repo-local `.codex/skills/paper-analysis/SKILL.md`
+- 至少覆盖一条最简单的 arXiv 联网报告任务
+
+这条 e2e 的最低断言包括：
+
+- 事件流中出现对 `.codex/skills/paper-analysis/SKILL.md` 的读取
+- 事件流中成功执行 `py -m paper_analysis.cli.main arxiv report --source-mode subscription-api --subscription-date ...`
+- `artifacts/e2e/arxiv/latest/summary.md`、`result.json`、`result.csv`、`stdout.txt` 全部生成
+- `result.json["source"] == "arXiv"`，且结果数量大于等于 1
+
+执行环境约束：
+
+- `quality local-ci` 默认运行这条 Codex 黑盒 e2e
+- 执行环境默认假设已安装并登录 `codex` CLI
+- 由于该用例验证的是 agent 完成真实软件任务的能力，而非 Codex 沙箱策略，因此允许测试入口使用 `--dangerously-bypass-approvals-and-sandbox`
+- prompt 中禁止显式写出“请加载某个 skill”之类指令；验证点是 agent 自主发现 skill 并正确路由任务
+
 ## HTML 审核页
 
 HTML 审核页会展示：
@@ -93,7 +117,7 @@ artifacts/quality/
 
 - `tests/unit/`：共享领域模型、排序逻辑、报告写入等纯逻辑
 - `tests/integration/`：CLI 与 pipeline 的跨层协作
-- `tests/e2e/`：顶会链路、arXiv 联网订阅链路，以及审核页消费真实产物的链路
+- `tests/e2e/`：顶会链路、arXiv 联网订阅链路、Codex 自然语言黑盒链路，以及审核页消费真实产物的链路
 
 ## 后续演进
 

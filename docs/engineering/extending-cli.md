@@ -43,6 +43,7 @@
 4. 如果新增或修改质量产物，同时更新 `docs/engineering/encoding-and-output.md`
 5. 如果 HTML 审核页的展示契约变化，同时维护逐用例结构化产物契约
 6. 如果新增联网 e2e，需在文档中明确其网络假设、执行入口和外部依赖边界
+7. 如果命令面、自然语言路由或 skill 触发语义发生变化，同时刷新 Codex 黑盒 e2e 的 prompt 与断言
 
 ## 维护 skill
 
@@ -51,3 +52,18 @@
 - 命令面变化
 - 工作流变化
 - 文档入口变化
+- 自然语言路由示例与默认追问规则变化
+
+## 维护自然语言入口契约
+
+任何新增命令、修改命令语义或调整默认参数时，都必须同步更新以下位置，保持单一真相：
+
+- `.codex/skills/paper-analysis/SKILL.md`
+- `.codex/skills/paper-analysis/references/natural-language-routing.md`
+- `docs/agent-guide/quickstart.md`
+- `docs/agent-guide/command-surface.md`
+- CLI `--help`
+
+如果自然语言请求只能映射到现有 `conference` / `arxiv` / `quality` / `report` 之一，就不要新增新的顶层命名空间。
+
+如果修改影响了 Codex 通过自然语言发现并调用 skill 的路径，也必须同步更新 `tests/e2e/` 中的 Codex 黑盒 e2e。
