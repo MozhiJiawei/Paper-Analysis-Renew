@@ -54,7 +54,7 @@ date: 2026-03-21
 1. 建立乱码问题的分类与盘点基线。
 2. 批量修复已损坏的中文源码、文档与测试文本。
 3. 明确运行时输入输出边界，补齐剩余链路缺口。
-4. 增加自动化检测，防止新的乱码再次进入主干。
+4. 把中文乱码检测纳入本地 CI，防止新的乱码再次进入主干。
 5. 更新文档与测试基线，使 UTF-8 约束成为仓库的可验证契约。
 
 ## Technical Considerations
@@ -88,7 +88,7 @@ date: 2026-03-21
 
 SpecFlow 发现的主要缺口：
 
-- 当前没有一条“仓库中文文案健康检查”自动化规则，导致存量乱码能通过现有质量门禁。
+- 当前没有一条“仓库中文文案健康检查”自动化规则纳入 `quality local-ci`，导致存量乱码能通过现有质量门禁。
 - 当前“UTF-8 读取成功”与“中文内容语义正确”未被区分，测试只覆盖了前者。
 - 当前没有定义“哪些目录允许程序化修复，哪些目录只能人工重写”的治理边界。
 
@@ -97,14 +97,14 @@ SpecFlow 发现的主要缺口：
 - [ ] `.codex/skills/paper-analysis/SKILL.md`、`docs/agent-guide/quickstart.md`、`docs/agent-guide/command-surface.md`、`docs/engineering/testing-and-quality.md`、`docs/engineering/encoding-and-output.md` 中的中文内容恢复为可读 UTF-8 文本。
 - [ ] [paper_analysis/cli/arxiv.py](D:/Git_Repo/Paper-Analysis-New/paper_analysis/cli/arxiv.py)、[paper_analysis/cli/quality.py](D:/Git_Repo/Paper-Analysis-New/paper_analysis/cli/quality.py)、[paper_analysis/services/report_writer.py](D:/Git_Repo/Paper-Analysis-New/paper_analysis/services/report_writer.py) 等用户可见文案密集文件中的中文字符串恢复为可读文本。
 - [ ] [tests/e2e/test_codex_agent_flow.py](D:/Git_Repo/Paper-Analysis-New/tests/e2e/test_codex_agent_flow.py)、[tests/e2e/test_golden_paths.py](D:/Git_Repo/Paper-Analysis-New/tests/e2e/test_golden_paths.py)、[tests/integration/test_skill_contract.py](D:/Git_Repo/Paper-Analysis-New/tests/integration/test_skill_contract.py) 中的中文描述与断言文本恢复可读，并继续表达原有测试意图。
-- [ ] 增加一条编码/文案健康检查，至少能发现常见 mojibake 片段或“UTF-8 文件中出现高概率错误转码模式”的文本污染。
+- [ ] 把中文乱码检测接入 `quality local-ci`，建议作为 `lint` 的一部分执行，至少能发现常见 mojibake 片段或“UTF-8 文件中出现高概率错误转码模式”的文本污染。
 - [ ] 删除旧 `artifacts/` 后，`py -m paper_analysis.cli.main quality local-ci` 可成功重建所需测试产物，且其中关键中文展示正常。
 - [ ] 重新生成 `artifacts/test-output/codex-arxiv-e2e/events.jsonl` 后，关键 agent message 中不再出现大面积乱码。
 - [ ] CLI `--help`、失败路径、e2e 报告路径、HTML 审核页四类对外文本接口均有回归验证。
 
 ## Success Metrics
 
-- 关键入口文件与核心 CLI 文案中不再出现典型乱码模式，如 `鎴`、`鍙`、`閺`、`浠`、`璇` 等成片异常片段。
+- 关键入口文件与核心 CLI 文案中不再出现典型乱码模式，如 `鎴`、`鍙`、`閺`、`浠`、`璇` 等成片异常片段。 <!-- lint: allow-mojibake -->
 - 开发者在 PowerShell 与 Python `read_text(encoding="utf-8")` 两种常见读取方式下，看到的文本一致且可读。
 - 现有质量检查和新增编码检查可以在乱码重新引入时稳定失败。
 
@@ -123,7 +123,7 @@ SpecFlow 发现的主要缺口：
 
 ### Phase 1: 建立盘点与检测脚本
 
-- 新增一个轻量级质量脚本，例如 `scripts/quality/check_text_encoding.py`。
+- 设计并新增一个轻量级乱码检测脚本，例如 `scripts/quality/check_text_encoding.py`，或将其并入现有 `scripts/quality/lint.py`。
 - 扫描范围优先覆盖：
   - `.codex/skills/**/*.md`
   - `docs/**/*.md`
@@ -132,7 +132,10 @@ SpecFlow 发现的主要缺口：
 - 检测策略建议包含：
   - 文件必须能按 UTF-8 读取。
   - 命中高概率 mojibake 片段时失败并输出文件路径与行号。
-  - 允许维护白名单，避免误报英文缩写或第三方数据。
+  - 允许维护白名单或显式豁免标记，避免误报测试样例、文档中的举例片段或第三方数据。
+- 将该检测明确接入 `quality local-ci`：
+  - 如果并入 `lint`，则 `py -m paper_analysis.cli.main quality lint` 与 `quality local-ci` 自动覆盖。
+  - 如果单独成阶段，则需要同步更新 CLI 帮助、质量阶段说明和 HTML 审核页展示。
 
 ### Phase 2: 修复关键入口与对外接口文案
 
@@ -151,14 +154,16 @@ SpecFlow 发现的主要缺口：
 ### Phase 3: 修复测试资产并补回归
 
 - 修复 e2e / integration / unit 中的中文描述，确保测试名、`record_step()`、断言消息可读。
-- 为新增检测脚本补单测或集成测试。
-- 增加至少一条覆盖“若仓库出现典型乱码片段，则 lint/quality 失败”的回归用例。
+- 为新增乱码检测补单测或集成测试。
+- 增加至少一条覆盖“若仓库出现典型乱码片段，则 `quality lint` / `quality local-ci` 失败”的回归用例。
+- 增加至少一条覆盖“正常中文文本不会被误报”的回归用例。
 
 ### Phase 4: 重新生成真实产物并核验
 
 - 先直接删除 `artifacts/`，不对历史测试产物做任何人工修复。
 - 运行 `py -m paper_analysis.cli.main quality local-ci`。
 - 重点核验：
+  - 本地 CI 输出中明确包含中文乱码检测结果。
   - `artifacts/quality/local-ci-latest.html`
   - `artifacts/test-output/codex-arxiv-e2e/events.jsonl`
   - `artifacts/e2e/arxiv/latest/summary.md`
@@ -171,6 +176,9 @@ SpecFlow 发现的主要缺口：
   - 哪些目录属于必须中文可读的对外面。
   - `artifacts/` 属于可删除可重建的测试产物，不纳入存量乱码人工修复范围。
   - 出现乱码时的推荐排查顺序：文件原文、Python 读写、子进程环境、终端显示、产物消费链路。
+- 在 [docs/engineering/testing-and-quality.md](D:/Git_Repo/Paper-Analysis-New/docs/engineering/testing-and-quality.md) 中补充：
+  - `quality local-ci` 包含中文乱码检测。
+  - 乱码检测的扫描范围、失败示例与允许豁免的边界。
 
 ## Sources & References
 
