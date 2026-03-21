@@ -5,7 +5,9 @@ import subprocess
 import sys
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
+from paper_analysis.domain.paper import Paper
 from paper_analysis.services.arxiv_pipeline import ArxivPipeline
 from paper_analysis.services.conference_pipeline import ConferencePipeline
 
@@ -15,16 +17,105 @@ ROOT_DIR = Path(__file__).resolve().parents[2]
 
 class PipelineIntegrationTests(unittest.TestCase):
     def test_conference_pipeline_returns_ranked_results(self) -> None:
+        """验证 conference pipeline 默认运行时会返回满足最低分阈值的排序结果。"""
+
         result = ConferencePipeline().run()
         self.assertGreaterEqual(len(result.papers), 1)
         self.assertGreaterEqual(result.papers[0].score, result.preferences.min_score)
 
-    def test_arxiv_pipeline_returns_ranked_results(self) -> None:
+    def test_arxiv_pipeline_returns_limited_results(self) -> None:
+        """验证 arXiv pipeline 默认运行时会返回抓取结果并按 limit 截断。"""
+
         papers, preferences = ArxivPipeline().run()
-        self.assertGreaterEqual(len(papers), 1)
-        self.assertGreaterEqual(papers[0].score, preferences.min_score)
+        self.assertEqual(2, len(papers))
+        self.assertTrue(all(paper.source == "arxiv" for paper in papers))
+        self.assertEqual(10, preferences.limit)
+        self.assertEqual("arxiv-001", papers[0].paper_id)
+        self.assertEqual("arxiv-002", papers[1].paper_id)
+
+    def test_arxiv_pipeline_loads_subscription_api_source(self) -> None:
+        """验证 arXiv pipeline 切换 subscription-api 后会直接返回抓取结果。"""
+
+        mocked_papers = [
+            Paper(
+                paper_id="2509.00001",
+                title="First Subscription Paper",
+                abstract="Fetched from arXiv API.",
+                source="arxiv",
+                venue="arXiv",
+                authors=["Ada"],
+                tags=["cs.AI"],
+                organization="OpenAI",
+                published_at="2025-09-01",
+            ),
+            Paper(
+                paper_id="2509.00002",
+                title="Second Subscription Paper",
+                abstract="Also fetched from arXiv API.",
+                source="arxiv",
+                venue="arXiv",
+                authors=["Bob"],
+                tags=["cs.LG"],
+                organization="Bio Lab",
+                published_at="2025-09-01",
+            ),
+        ]
+
+        with patch(
+            "paper_analysis.services.arxiv_pipeline.load_subscription_papers",
+            return_value=mocked_papers,
+        ) as mocked_loader:
+            papers, preferences = ArxivPipeline().run(
+                source_mode="subscription-api",
+                subscription_date="2025-09/09-01",
+                categories=["cs.AI"],
+                max_results=3,
+            )
+
+        self.assertEqual(2, len(papers))
+        self.assertEqual("2509.00001", papers[0].paper_id)
+        self.assertEqual("2509.00002", papers[1].paper_id)
+        self.assertEqual(10, preferences.limit)
+        mocked_loader.assert_called_once_with(
+            subscription_date="2025-09/09-01",
+            categories=["cs.AI"],
+            max_results=3,
+        )
+
+    def test_arxiv_report_requires_subscription_date_for_api_mode(self) -> None:
+        """验证 subscription-api 模式缺少日期参数时返回结构化失败。"""
+
+        env = os.environ.copy()
+        env["PYTHONUTF8"] = "1"
+        env["PYTHONIOENCODING"] = "utf-8"
+
+        result = subprocess.run(
+            [
+                sys.executable,
+                "-m",
+                "paper_analysis.cli.main",
+                "arxiv",
+                "report",
+                "--source-mode",
+                "subscription-api",
+            ],
+            cwd=ROOT_DIR,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            env=env,
+            check=False,
+        )
+
+        self.assertEqual(1, result.returncode)
+        self.assertIn("[FAIL] scope=arxiv.report", result.stdout)
+        self.assertIn("--subscription-date", result.stdout)
+        self.assertNotIn("Traceback", result.stdout + result.stderr)
 
     def test_conference_pipeline_reads_paperlists_fixture(self) -> None:
+        """验证 conference pipeline 能从 paperlists fixture 读取真实会议数据。"""
+
         result = ConferencePipeline().run(
             venue="iclr",
             year=2025,
@@ -40,6 +131,8 @@ class PipelineIntegrationTests(unittest.TestCase):
         self.assertTrue(all(paper.acceptance_status for paper in result.papers))
 
     def test_conference_filter_returns_structured_error_for_missing_input(self) -> None:
+        """验证 conference filter 在输入文件缺失时返回结构化失败输出而非 Traceback。"""
+
         env = os.environ.copy()
         env["PYTHONUTF8"] = "1"
         env["PYTHONIOENCODING"] = "utf-8"
@@ -69,6 +162,8 @@ class PipelineIntegrationTests(unittest.TestCase):
         self.assertNotIn("Traceback", result.stdout + result.stderr)
 
     def test_conference_report_returns_structured_error_for_missing_paperlists_root(self) -> None:
+        """验证 conference report 在 paperlists 数据源缺失时返回结构化失败输出。"""
+
         env = os.environ.copy()
         env["PYTHONUTF8"] = "1"
         env["PYTHONIOENCODING"] = "utf-8"

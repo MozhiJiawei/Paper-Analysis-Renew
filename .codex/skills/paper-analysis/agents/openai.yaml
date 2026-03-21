@@ -1,0 +1,4 @@
+interface:
+  display_name: "Paper Analysis"
+  short_description: "Route paper-analysis requests onto stable conference, arxiv, quality, and report CLIs"
+  default_prompt: "Read the repo-local paper-analysis skill, route the user's natural-language request onto the existing conference/arxiv/quality/report CLI commands, ask only for missing required parameters, and do not invent a recommend namespace."

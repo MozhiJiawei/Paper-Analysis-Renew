@@ -7,6 +7,12 @@ name = "paper-analysis-new"
 version = "0.1.0"
 description = "Agent-first paper filtering foundation"
 requires-python = ">=3.11"
+dependencies = [
+    "Jinja2>=3.1,<4",
+]
 
 [tool.setuptools.packages.find]
 include = ["paper_analysis*"]
+
+[tool.setuptools.package-data]
+"paper_analysis" = ["templates/*.j2"]

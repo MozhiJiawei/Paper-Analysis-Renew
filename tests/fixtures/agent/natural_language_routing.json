@@ -1,0 +1,18 @@
+[
+  {
+    "request": "帮我筛 ICLR 2025 里符合我偏好的论文",
+    "expected_command": "py -m paper_analysis.cli.main conference filter --venue iclr --year 2025"
+  },
+  {
+    "request": "帮我看今天的 arXiv AI 更新",
+    "expected_command": "py -m paper_analysis.cli.main arxiv report --source-mode subscription-api --subscription-date 2025-09/09-01 --category cs.AI"
+  },
+  {
+    "request": "跑一下本地检查",
+    "expected_command": "py -m paper_analysis.cli.main quality local-ci"
+  },
+  {
+    "request": "把最近的顶会报告给我看看",
+    "expected_command": "py -m paper_analysis.cli.main report --source conference"
+  }
+]

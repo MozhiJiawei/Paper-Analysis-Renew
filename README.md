@@ -16,6 +16,8 @@
 - arXiv 命名空间：`arxiv`
 - 质量门禁入口：`quality local-ci`
 - 顶会真实数据源：`third_party/paperlists` 子模块
+- CI HTML 审核页：`artifacts/quality/local-ci-latest.html`
+- HTML 模板渲染：`Jinja2`
 
 ## 快速开始
 
@@ -48,6 +50,14 @@ py -m paper_analysis.cli.main arxiv report
 ```powershell
 py -m paper_analysis.cli.main quality local-ci
 ```
+
+执行完成后，可直接打开：
+
+```text
+artifacts/quality/local-ci-latest.html
+```
+
+该页面会汇总测试阶段状态、执行输出，以及 `conference` / `arxiv` 的 e2e 推荐报告。
 
 ## 文档入口
 

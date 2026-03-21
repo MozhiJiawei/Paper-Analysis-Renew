@@ -1,54 +1,82 @@
+---
+name: "paper-analysis"
+description: "Use when working in this repository on conference paper filtering, arXiv daily updates or subscription fetching, local quality checks, or latest report lookup. Route natural-language requests onto the stable `conference`, `arxiv`, `quality`, and `report` CLI commands, and never invent a separate `recommend` namespace."
+---
+
 # Paper Analysis Repo Skill
 
-进入本仓库后，默认先做三件事：
+这个仓库是一个面向 Codex 的论文分析 CLI。进入仓库后，优先围绕两条业务链路工作：
+
+1. `conference`：从顶会论文集合中筛选符合用户偏好的论文
+2. `arxiv`：从 arXiv 每日更新或订阅抓取中筛选符合用户偏好的论文
+
+“推荐 / 排序”是共享内部阶段能力，不是独立的第三个业务命名空间。任何自然语言请求，都只能映射到现有稳定入口：
+
+- `conference`
+- `arxiv`
+- `quality`
+- `report`
+
+## Quick Start
+
+进入仓库后默认先做三件事：
+
 1. 阅读 `docs/agent-guide/quickstart.md`
 2. 阅读 `docs/agent-guide/command-surface.md`
-3. 根据任务选择 `conference`、`arxiv`、`quality` 或 `report` 命令
+3. 按用户意图选择 `conference`、`arxiv`、`quality` 或 `report`
 
-## 软件边界
+常用稳定命令：
 
-- 业务能力只有两类：
-  - 顶会论文筛选
-  - arXiv 日更筛选
-- “推荐 / 排序” 是共享内部阶段，不是独立命名空间
-- 扩展业务能力时，优先沿 `conference` 或 `arxiv` 链路扩展，不新增 `recommend` CLI
+- `py -m paper_analysis.cli.main --help`
+- `py -m paper_analysis.cli.main conference --help`
+- `py -m paper_analysis.cli.main arxiv --help`
+- `py -m paper_analysis.cli.main quality local-ci`
+- `py -m paper_analysis.cli.main report --source conference`
 
-## 推荐工作流
+## 自然语言路由
 
-- 查看总入口：`py -m paper_analysis.cli.main --help`
-- 查看顶会命令：`py -m paper_analysis.cli.main conference --help`
-- 查看 arXiv 命令：`py -m paper_analysis.cli.main arxiv --help`
-- 跑本地门禁：`py -m paper_analysis.cli.main quality local-ci`
-- 查看最近报告：`py -m paper_analysis.cli.main report --source conference`
+优先把自然语言请求翻译成已有 CLI，而不是发明新入口：
 
-## 顶会真实数据源
+- 顶会筛选请求 -> `conference filter` 或 `conference report`
+- arXiv 日更 / 订阅请求 -> `arxiv daily-filter` 或 `arxiv report`
+- 本地检查 / 回归请求 -> `quality local-ci`
+- 查看最近产物 -> `report --source <conference|arxiv>`
+
+缺少关键参数时，只追问必要信息：
+
+- `conference` 缺会议或年份时追问 `venue` / `year`
+- `arxiv` 在 `subscription-api` 模式下缺日期时追问 `subscription-date`
+- `report` 缺来源时追问 `conference` 或 `arxiv`
+
+默认假设：
+
+- 顶会链路优先复用 `conference` 命名空间，不新增 `recommend`
+- arXiv 链路优先复用 `arxiv` 命名空间，不在入口层做新的偏好产品面
+- 质量检查默认运行 `quality local-ci`
+- 文本产物与文档统一使用 UTF-8
+
+完整路由示例见：
+
+- `references/natural-language-routing.md`
+- `references/command-surface.md`
+- `references/workflow.md`
+
+## 数据源与边界
+
+顶会真实数据源：
 
 - `conference filter` / `conference report` 支持通过 `paperlists` 子模块读取真实会议 JSON
 - 默认子模块路径：`third_party/paperlists`
-- 初始化子模块：
-  - `git submodule update --init --recursive`
-- 示例：
-  - `py -m paper_analysis.cli.main conference report --venue iclr --year 2025`
-  - `py -m paper_analysis.cli.main conference filter --venue cvpr --year 2024 --seed 7`
+- 初始化命令：`git submodule update --init --recursive`
+
+arXiv 输入模式：
+
+- `fixture`：读取本地样例 JSON
+- `subscription-api`：访问 arXiv 官方 API
+- 订阅 API 最小参数：`--source-mode subscription-api --subscription-date YYYY-MM/MM-DD`
 
 ## 首读文档
 
 - `docs/agent-guide/quickstart.md`
 - `docs/agent-guide/command-surface.md`
 - `docs/engineering/testing-and-quality.md`
-- `docs/engineering/extending-cli.md`
-
-## 任务路由
-
-- 新增顶会相关能力时，优先看 `paper_analysis/cli/conference.py`、`ConferencePipeline` 和 `paper_analysis/sources/conference/`
-- 新增 arXiv 日更能力时，优先看 `paper_analysis/cli/arxiv.py` 和 `ArxivPipeline`
-- 修改偏好筛选逻辑时，优先看 `PreferenceProfile`、`PreferenceRanker`
-- 更新质量门禁时，优先看 `paper_analysis/cli/quality.py` 和 `scripts/quality/`
-
-## 维护要求
-
-- 变更命令面时，必须同步更新：
-  - 本 skill
-  - `docs/agent-guide/command-surface.md`
-  - CLI `--help`
-- 新增来源、规则或测试层级时，更新 `docs/engineering/extending-cli.md`

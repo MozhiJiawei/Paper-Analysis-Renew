@@ -10,6 +10,8 @@ from paper_analysis.domain.preference import PreferenceProfile
 
 class FilteringTests(unittest.TestCase):
     def test_rank_papers_prefers_topic_and_organization(self) -> None:
+        """验证排序逻辑优先保留命中主题与机构偏好的论文。"""
+
         papers = [
             Paper(
                 paper_id="p1",
@@ -48,6 +50,8 @@ class FilteringTests(unittest.TestCase):
         self.assertGreater(ranked[0].score, 0.0)
 
     def test_build_subprocess_env_forces_utf8(self) -> None:
+        """验证质量子进程环境强制开启 UTF-8 编码。"""
+
         env = build_subprocess_env()
         self.assertEqual("1", env["PYTHONUTF8"])
         self.assertEqual("utf-8", env["PYTHONIOENCODING"])
