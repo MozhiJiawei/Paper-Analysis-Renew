@@ -1,7 +1,7 @@
 ---
 title: fix: 系统性治理中文乱码与编码污染
 type: fix
-status: active
+status: completed
 date: 2026-03-21
 ---
 

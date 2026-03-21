@@ -5,7 +5,7 @@
 当前仓库的质量门禁以 `unittest` 和自定义质量脚本为基础，统一通过稳定的 CLI 入口执行。
 
 - `unittest` 负责 unit、integration、e2e 测试
-- `lint` 脚本检查 UTF-8、行尾空格、制表符和文件结尾换行
+- `lint` 脚本检查 UTF-8、行尾空格、制表符、文件结尾换行，以及常见乱码片段（支持通过 `lint: allow-mojibake` 显式豁免）
 - `typecheck` 脚本检查公开函数的类型注解边界
 - `Jinja2` 负责静态 HTML 审核页渲染
 
@@ -28,6 +28,11 @@ py -m paper_analysis.cli.main quality local-ci
 ```text
 artifacts/quality/local-ci-latest.html
 ```
+
+补充约束：
+
+- 需要通过 `subprocess.run(..., capture_output=True)` 抓取 CLI 输出的测试，优先依赖 CLI 自身的 UTF-8 标准输出配置，而不是把编码稳定性完全外包给调用方环境
+- 如果测试或脚本继续拉起 Python 子进程，仍应显式传递 `PYTHONUTF8=1` 与 `PYTHONIOENCODING=utf-8`，避免 Windows 管道输出退回本地代码页
 
 ## arXiv 联网 e2e 约定
 

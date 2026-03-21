@@ -3,6 +3,7 @@ from __future__ import annotations
 from argparse import ArgumentParser
 
 from paper_analysis.cli import arxiv, conference, quality, report
+from paper_analysis.shared.encoding import configure_utf8_stdio
 
 
 def build_parser() -> ArgumentParser:
@@ -19,6 +20,7 @@ def build_parser() -> ArgumentParser:
 
 
 def main() -> int:
+    configure_utf8_stdio()
     parser = build_parser()
     args = parser.parse_args()
     return args.handler(args)

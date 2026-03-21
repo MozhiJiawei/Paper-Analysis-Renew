@@ -7,6 +7,7 @@ from argparse import Namespace
 from pathlib import Path
 from typing import Any
 
+from paper_analysis.shared.encoding import build_utf8_subprocess_env
 from paper_analysis.services.ci_html_writer import QualityStageResult, write_ci_html_report
 from paper_analysis.services.quality_case_support import (
     build_stage_case_result,
@@ -122,10 +123,7 @@ def _run_stage(stage_name: str, command: list[str]) -> tuple[int, QualityStageRe
 
 
 def build_subprocess_env() -> dict[str, str]:
-    env = os.environ.copy()
-    env["PYTHONUTF8"] = "1"
-    env["PYTHONIOENCODING"] = "utf-8"
-    return env
+    return build_utf8_subprocess_env(os.environ.copy())
 
 
 def first_non_empty_line(content: str) -> str:
