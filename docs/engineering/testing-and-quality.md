@@ -121,6 +121,7 @@ artifacts/quality/
 ## 测试分层
 
 - `tests/unit/`：共享领域模型、排序逻辑、报告写入等纯逻辑
+- `tests/unit/test_benchmark_builder.py`、`test_annotation_merge.py`、`test_codex_annotator_contract.py`、`test_annotation_repository.py`、`test_benchmark_dataset_contract.py`：覆盖单版本 benchmark 数据协议、双人标注合并、AI 预标 contract、仓储写入与数据门禁
 - `tests/integration/`：CLI 与 pipeline 的跨层协作
 - `tests/e2e/`：顶会链路、arXiv 联网订阅链路、Codex 自然语言黑盒链路，以及审核页消费真实产物的链路
 

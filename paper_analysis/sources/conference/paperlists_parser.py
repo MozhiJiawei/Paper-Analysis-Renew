@@ -91,7 +91,7 @@ def is_accepted_record(payload: dict[str, object]) -> bool:
     if any(token in normalized for token in reject_tokens):
         return False
 
-    accept_tokens = ("accept", "accepted", "oral", "spotlight", "poster", "main")
+    accept_tokens = ("accept", "accepted", "oral", "spotlight", "poster", "main", "technical")
     return any(token in normalized for token in accept_tokens)
 
 

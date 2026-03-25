@@ -1,0 +1,9 @@
+# 豆包 API 私有配置模板
+# 请将真实密钥写入用户私有目录 ~/.paper-analysis/doubao.yaml
+# 或通过环境变量 ARK_API_KEY 提供。
+# 不要把真实密钥写回仓库内的 paper_analysis/config/ 目录。
+
+doubao:
+  api_key: "YOUR_API_KEY_HERE"
+  base_url: "https://ark.cn-beijing.volces.com/api/v3"
+  model: "doubao-seed-2-0-pro-260215"

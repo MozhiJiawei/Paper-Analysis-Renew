@@ -23,6 +23,12 @@ py -m paper_analysis.cli.main arxiv report
 py -m paper_analysis.cli.main quality local-ci
 ```
 
+## Doubao 私有配置
+
+- 默认优先读取环境变量 `ARK_API_KEY`
+- 如需本地配置文件，请放在用户私有目录 `~/.paper-analysis/doubao.yaml`
+- 仓库内只保留模板文件 `paper_analysis/config/doubao.template.yaml`，不要在 `paper_analysis/config/` 下保存真实密钥
+
 ## 自然语言如何落到命令
 
 当人类直接对 Codex 说自然语言时，默认按下面的稳定入口分流：
