@@ -1,13 +1,12 @@
 from __future__ import annotations
 
 import json
-import os
-import subprocess
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Callable
 
 from paper_analysis.domain.benchmark import PREFERENCE_LABELS, RESEARCH_OBJECT_LABELS
 from paper_analysis.domain.benchmark import AnnotationRecord, CandidatePaper
+from paper_analysis.utils.codex_cli_client import CodexCliClient
 
 
 Runner = Callable[[str], str]
@@ -15,7 +14,12 @@ Runner = Callable[[str], str]
 
 @dataclass(slots=True)
 class CodexCliAnnotator:
+    client: CodexCliClient | None = None
     runner: Runner | None = None
+    _client: CodexCliClient = field(init=False, repr=False)
+
+    def __post_init__(self) -> None:
+        self._client = self.client or CodexCliClient(runner=self.runner)
 
     def annotate(self, candidate: CandidatePaper) -> AnnotationRecord:
         prompts = [
@@ -47,25 +51,10 @@ class CodexCliAnnotator:
         raise RuntimeError(f"Codex_CLI 预标失败：{candidate.paper_id}")
 
     def _run_prompt(self, prompt: str) -> str:
-        if self.runner is not None:
-            return self.runner(prompt)
-        executable = "codex.cmd" if os.name == "nt" else "codex"
-        result = subprocess.run(
-            [
-                executable,
-                "exec",
-                "--dangerously-bypass-approvals-and-sandbox",
-                prompt,
-            ],
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
-            check=False,
-        )
-        if result.returncode != 0:
-            raise RuntimeError(f"Codex_CLI 预标失败：{result.stderr.strip() or result.stdout.strip()}")
-        return result.stdout.strip()
+        try:
+            return self._client.exec(prompt)
+        except RuntimeError as exc:
+            raise RuntimeError(f"Codex_CLI 预标失败：{exc}") from exc
 
 
 def build_codex_annotation_prompt(candidate: CandidatePaper, *, force_decision: bool = False) -> str:
