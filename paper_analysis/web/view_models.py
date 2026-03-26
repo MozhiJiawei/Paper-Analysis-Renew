@@ -33,7 +33,10 @@ class AnnotationAppState:
         for paper_id, record in records.items():
             has_conflict = paper_id in conflicts and not conflicts[paper_id].is_resolved
             human_completed = paper_id in human
-            status = _derive_status(has_conflict=has_conflict, human_completed=human_completed)
+            status = _derive_status(
+                has_conflict=has_conflict,
+                human_completed=human_completed,
+            )
             if status_filter != "all" and status != status_filter:
                 continue
             rows.append(

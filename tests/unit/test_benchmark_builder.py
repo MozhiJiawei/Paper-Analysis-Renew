@@ -57,6 +57,7 @@ class BenchmarkBuilderTests(unittest.TestCase):
         )
         self.assertTrue(any(candidate.candidate_negative_tier == "positive" for candidate in candidates))
         self.assertTrue(any(candidate.candidate_negative_tier == "negative" for candidate in candidates))
+        self.assertTrue(all(len(candidate.candidate_preference_labels) <= 1 for candidate in candidates))
 
 
 if __name__ == "__main__":

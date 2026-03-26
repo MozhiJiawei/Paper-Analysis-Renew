@@ -19,7 +19,7 @@
 
 - 每条记录必须填写一个 `primary_research_object`
 - `negative_tier` 只允许 `positive` 或 `negative`
-- `preference_labels` 允许为空，但若非空，`negative_tier` 必须为 `positive`
+- `preference_labels` 为单选：`positive` 时必须且只能有 1 个标签，`negative` 时必须为空
 - `negative` 样本必须保持 `preference_labels=[]`
 - 人类复标阶段不要直接覆盖 AI 结果，应保存为独立文件
 - 标注文件与冲突文件不得重复保存标题、摘要、venue、source 等外部元数据

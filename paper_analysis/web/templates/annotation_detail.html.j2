@@ -86,12 +86,12 @@
         </div>
 
         <fieldset class="chip-fieldset">
-          <legend>偏好标签</legend>
-          <p class="muted">只有 positive 样本才勾选偏好标签；negative 样本保持不勾选。</p>
+          <legend>子偏好标签</legend>
+          <p class="muted">只有 positive 样本才选择子偏好标签；现行协议要求单选，negative 样本保持不选择。</p>
           <div class="chip-grid">
             {% for label in preference_labels %}
             <label class="checkbox-chip">
-              <input type="checkbox" name="preference_labels" value="{{ label }}" {% if preference_seed and label in preference_seed.preference_labels %}checked{% endif %}>
+              <input type="radio" name="preference_labels" value="{{ label }}" {% if preference_seed and label in preference_seed.preference_labels %}checked{% endif %}>
               <span>{{ label }}</span>
             </label>
             {% endfor %}

@@ -102,6 +102,8 @@ class AnnotationApplication:
         preference_labels = body.get("preference_labels", [])
         if negative_tier == "negative":
             preference_labels = []
+        elif len(preference_labels) != 1:
+            raise ValueError("positive 样本的子偏好标签必须单选。")
         annotation = AnnotationRecord(
             paper_id=paper_id,
             labeler_id="human_reviewer",

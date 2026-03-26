@@ -35,6 +35,15 @@ class CodexAnnotatorContractTests(unittest.TestCase):
         self.assertIn("preference_labels", prompt)
         self.assertIn("negative_tier", prompt)
         self.assertNotIn("target_preference_labels", prompt)
+        self.assertIn("最小充分标注", prompt)
+        self.assertIn("必须且只能选择一个最相关的偏好标签", prompt)
+        self.assertIn("不允许输出多个偏好标签", prompt)
+        self.assertIn("系统与调度优化", prompt)
+        self.assertIn("模型结构侧推理优化", prompt)
+        self.assertIn("被优化的主要对象", prompt)
+        self.assertIn("上下文压缩、KV cache 压缩、prompt 压缩不算模型压缩", prompt)
+        self.assertIn("为解码方法配套 head 结构", prompt)
+        self.assertIn("如果 kernel 只是支撑压缩、缓存或系统方法落地，默认不单独标", prompt)
 
     def test_parse_payload_and_build_annotation(self) -> None:
         """验证 Codex 输出能被解析并转成 AnnotationRecord。"""

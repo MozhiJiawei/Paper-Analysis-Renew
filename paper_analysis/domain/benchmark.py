@@ -64,6 +64,13 @@ def normalize_negative_tier(value: str) -> str:
     raise ValueError(f"negative_tier 非法：{value}")
 
 
+def _validate_single_preference_label(field_name: str, items: list[str]) -> list[str]:
+    normalized = _validate_subset(field_name, items, PREFERENCE_LABELS)
+    if len(normalized) > 1:
+        raise ValueError(f"{field_name} 只允许单选")
+    return normalized
+
+
 def _clean_evidence_spans(evidence_spans: dict[str, list[str]]) -> dict[str, list[str]]:
     cleaned_evidence: dict[str, list[str]] = {}
     for label, spans in evidence_spans.items():
@@ -177,10 +184,9 @@ class AnnotationRecord:
             [self.primary_research_object],
             RESEARCH_OBJECT_LABELS,
         )[0]
-        self.preference_labels = _validate_subset(
+        self.preference_labels = _validate_single_preference_label(
             "preference_labels",
             self.preference_labels,
-            PREFERENCE_LABELS,
         )
         self.negative_tier = normalize_negative_tier(self.negative_tier)
         if self.negative_tier == "negative":
@@ -273,10 +279,9 @@ class BenchmarkRecord:
                 [self.final_primary_research_object],
                 RESEARCH_OBJECT_LABELS,
             )[0]
-        self.final_preference_labels = _validate_subset(
+        self.final_preference_labels = _validate_single_preference_label(
             "final_preference_labels",
             self.final_preference_labels,
-            PREFERENCE_LABELS,
         )
         if self.final_negative_tier:
             self.final_negative_tier = normalize_negative_tier(self.final_negative_tier)

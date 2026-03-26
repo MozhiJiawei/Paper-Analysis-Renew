@@ -465,9 +465,10 @@ def _infer_preference_labels(paper: Paper) -> list[str]:
             " ".join(tag.lower() for tag in paper.tags),
         ]
     )
-    return [
+    matched = [
         label for label, keywords in PREFERENCE_RULES.items() if any(keyword in haystack for keyword in keywords)
     ]
+    return matched[:1]
 
 
 def _infer_negative_tier(paper: Paper, primary_research_object: str) -> str:

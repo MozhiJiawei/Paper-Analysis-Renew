@@ -9,7 +9,10 @@
 - `模型结构侧推理优化`
 - `模型压缩`
 
-每篇论文在 A 轴上允许命中零个、一个或多个标签。若命中多个标签，标注时应为每个标签记录一条证据句。
+当前协议为单选：
+
+- `negative_tier=positive` 时，必须且只能选择 1 个偏好标签
+- `negative_tier=negative` 时，必须保持 `preference_labels=[]`
 
 ## B 轴：主研究对象
 
@@ -31,6 +34,6 @@
 - `positive`
 - `negative`
 
-`positive` 仅用于命中 A 轴标签的样本，允许填写一个或多个 `preference_labels`。
+`positive` 仅用于命中 A 轴标签的样本，必须填写且只能填写一个 `preference_label`。
 
 `negative` 用于未命中目标偏好标签的样本，必须保持 `preference_labels=[]`。

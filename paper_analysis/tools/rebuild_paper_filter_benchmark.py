@@ -23,7 +23,7 @@ PAPERLISTS_ROOT = ROOT_DIR / "third_party" / "paperlists"
 def _build_schema_payload() -> dict[str, object]:
     return {
         "name": "paper-filter",
-        "version": "2026-03-24",
+        "version": "2026-03-26",
         "description": "单版本 paper-filter benchmark 协议。",
         "files": {
             "records": "records.jsonl",
@@ -58,6 +58,10 @@ def _build_schema_payload() -> dict[str, object]:
             "evidence_spans": "object",
             "notes": "string",
             "review_status": "enum",
+        },
+        "annotation_constraints": {
+            "preference_labels_cardinality": "0..1",
+            "positive_requires_exactly_one_preference_label": True,
         },
         "negative_tiers": ["positive", "negative"],
         "preference_labels": list(PREFERENCE_LABELS),

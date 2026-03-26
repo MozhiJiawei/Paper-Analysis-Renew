@@ -15,6 +15,11 @@ py -m paper_analysis.web.annotation_app
 
 默认地址：`http://127.0.0.1:8042`
 
+## 标注约束
+
+- 单论文标注页中的“子偏好标签”改为单选
+- 当 `negative_tier=negative` 时，网页会自动清空并禁用子偏好标签
+
 ## 摘要展示
 
 - 单论文标注页默认同时展示英文摘要 `Abstract` 与 `中文摘要`

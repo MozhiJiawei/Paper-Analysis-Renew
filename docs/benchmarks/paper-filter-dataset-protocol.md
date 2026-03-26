@@ -30,3 +30,9 @@
 - `merged.jsonl` 中同一 `paper_id` 必须全局唯一
 - 未解决冲突的样本不得进入 `merged.jsonl`
 - 本协议不再引入 `calibration`、`v1`、`release`、`split` 等目录或字段
+
+## 标注字段约束
+
+- `preference_labels` 使用数组存储，但当前协议要求长度只能为 `0..1`
+- `negative_tier=positive` 时必须且只能选择 1 个 `preference_label`
+- `negative_tier=negative` 时必须保持 `preference_labels=[]`

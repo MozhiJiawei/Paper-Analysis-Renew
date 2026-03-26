@@ -200,7 +200,7 @@ class AnnotationApplicationTests(unittest.TestCase):
         html = b"".join(response).decode("utf-8")
         self.assertIn('<option value="AI 系统 / 基础设施" selected>', html)
         self.assertIn('<option value="positive" selected>', html)
-        self.assertIn('<input type="checkbox" name="preference_labels" value="模型压缩" checked>', html)
+        self.assertIn('<input type="radio" name="preference_labels" value="模型压缩" checked>', html)
         self.assertNotIn('name="target_preference_labels"', html)
         self.assertIn('<textarea name="evidence_1" rows="3"></textarea>', html)
         self.assertIn('<textarea name="notes" rows="3"></textarea>', html)
@@ -291,7 +291,7 @@ class AnnotationApplicationTests(unittest.TestCase):
         html = b"".join(response).decode("utf-8")
         self.assertIn('<option value="评测 / Benchmark / 数据集" selected>', html)
         self.assertIn('<option value="positive" selected>', html)
-        self.assertIn('<input type="checkbox" name="preference_labels" value="模型压缩" checked>', html)
+        self.assertIn('<input type="radio" name="preference_labels" value="模型压缩" checked>', html)
         self.assertNotIn('name="target_preference_labels"', html)
         self.assertIn('<textarea name="evidence_1" rows="3">final evidence</textarea>', html)
         self.assertIn('<textarea name="notes" rows="3">final notes</textarea>', html)
@@ -408,6 +408,39 @@ class AnnotationApplicationTests(unittest.TestCase):
         self.assertEqual(1, len(human))
         self.assertEqual("negative", human[0].negative_tier)
         self.assertEqual([], human[0].preference_labels)
+
+    def test_post_positive_annotation_requires_exactly_one_preference_label(self) -> None:
+        """验证 positive 样本必须且只能提交一个子偏好标签。"""
+
+        temp_root = ROOT_DIR / "artifacts" / "test-output" / "annotation-app-post-positive-single-select"
+        if temp_root.exists():
+            shutil.rmtree(temp_root)
+
+        repository = AnnotationRepository(temp_root)
+        repository.write_candidates([_candidate(paper_id="paper-positive-single", title="Positive Single Select")])
+        repository.write_annotations([_ai_annotation(paper_id="paper-positive-single")], repository.annotations_ai_path)
+
+        app = AnnotationApplication(repository)
+        body = (
+            "primary_research_object=LLM&"
+            "preference_labels=%E8%A7%A3%E7%A0%81%E7%AD%96%E7%95%A5%E4%BC%98%E5%8C%96&"
+            "preference_labels=%E6%A8%A1%E5%9E%8B%E5%8E%8B%E7%BC%A9&"
+            "negative_tier=positive"
+        ).encode("utf-8")
+
+        statuses: list[str] = []
+        response = app(
+            {
+                "REQUEST_METHOD": "POST",
+                "PATH_INFO": "/papers/paper-positive-single",
+                "wsgi.input": BytesIO(body),
+                "CONTENT_LENGTH": str(len(body)),
+            },
+            lambda status, response_headers: statuses.append(status),
+        )
+
+        self.assertTrue(any(status.startswith("400") for status in statuses))
+        self.assertIn("子偏好标签必须单选", b"".join(response).decode("utf-8"))
 
     def test_conflict_resolution_marks_conflict_resolved_and_emits_merged(self) -> None:
         """验证冲突页可以在线仲裁，并在仲裁后产出 merged 结果。"""
