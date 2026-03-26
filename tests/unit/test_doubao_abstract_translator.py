@@ -221,18 +221,6 @@ class DoubaoClientTests(unittest.TestCase):
         self.assertTrue(result["success"])
         self.assertEqual("ok", result["content"])
 
-    def test_submit_invokes_callback_on_success(self) -> None:
-        received: list[dict[str, object]] = []
-        client = DoubaoClient(
-            runner=lambda _: {"success": True, "content": "ok", "usage": None},
-            config_path=Path("missing.yaml"),
-        )
-
-        future = client.submit([{"role": "user", "content": "hi"}], callback=received.append)
-
-        self.assertTrue(future.result()["success"])
-        self.assertEqual("ok", received[0]["content"])
-
     def test_sdk_response_is_normalized(self) -> None:
         response = SimpleNamespace(
             choices=[SimpleNamespace(message=SimpleNamespace(content="translated"))],

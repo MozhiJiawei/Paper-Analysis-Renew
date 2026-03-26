@@ -116,15 +116,6 @@ class CodexCliClientTests(unittest.TestCase):
 
         self.assertIn("gpt-5.1-codex-mini", str(context.exception))
 
-    def test_submit_invokes_callback_on_success(self) -> None:
-        received: list[str] = []
-        client = CodexCliClient(runner=lambda prompt: f"ok:{prompt}")
-
-        future = client.submit("hello", callback=received.append)
-
-        self.assertEqual("ok:hello", future.result())
-        self.assertEqual(["ok:hello"], received)
-
     def test_shared_client_can_be_reused_concurrently(self) -> None:
         def runner(prompt: str) -> str:
             time.sleep(0.01 if prompt.endswith("0") else 0.001)

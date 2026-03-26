@@ -24,7 +24,6 @@ TEMPLATE_CONFIG_PATH = ROOT_DIR / "paper_analysis" / "config" / "doubao.template
 DEFAULT_AUDIT_LOG_PATH = ARTIFACTS_DIR / "audit" / "doubao-api.jsonl"
 DEFAULT_AUDIT_REQUESTS_DIR = ARTIFACTS_DIR / "audit" / "doubao-api" / "requests"
 Runner = Callable[[list[dict[str, Any]]], dict[str, Any]]
-ResultCallback = Callable[[dict[str, Any]], None]
 _AUDIT_LOG_LOCK = threading.Lock()
 
 
@@ -98,12 +97,8 @@ class DoubaoClient:
         messages: list[dict[str, Any]],
         *,
         stream: bool = False,
-        callback: ResultCallback | None = None,
     ) -> Future[dict[str, Any]]:
-        future = self._get_executor().submit(self._run_chat_sync, messages, stream=stream)
-        if callback is not None:
-            future.add_done_callback(lambda done: _invoke_result_callback(done, callback))
-        return future
+        return self._get_executor().submit(self._run_chat_sync, messages, stream=stream)
 
     def _run_chat_sync(self, messages: list[dict[str, Any]], *, stream: bool = False) -> dict[str, Any]:
         started_at = time.perf_counter()
@@ -294,18 +289,6 @@ def _render_prompt_markdown(messages: list[dict[str, Any]]) -> str:
         lines.append("```")
         lines.append("")
     return "\n".join(lines).rstrip() + "\n"
-
-
-def _invoke_result_callback(
-    future: Future[dict[str, Any]],
-    callback: ResultCallback,
-) -> None:
-    try:
-        callback(future.result())
-    except Exception:
-        return
-
-
 def _validate_concurrency(value: int) -> int:
     if 1 <= value <= 10:
         return value

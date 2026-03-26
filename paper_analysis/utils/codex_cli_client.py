@@ -10,7 +10,6 @@ from typing import Callable
 
 
 Runner = Callable[[str], str]
-ResultCallback = Callable[[str], None]
 
 
 @dataclass(slots=True)
@@ -31,11 +30,8 @@ class CodexCliClient:
         self.concurrency = _validate_concurrency(self.concurrency)
         self._executor_lock = threading.Lock()
 
-    def submit(self, prompt: str, callback: ResultCallback | None = None) -> Future[str]:
-        future = self._get_executor().submit(self._run_prompt_sync, prompt)
-        if callback is not None:
-            future.add_done_callback(lambda done: _invoke_string_callback(done, callback))
-        return future
+    def submit(self, prompt: str) -> Future[str]:
+        return self._get_executor().submit(self._run_prompt_sync, prompt)
 
     def _run_prompt_sync(self, prompt: str) -> str:
         if self.runner is not None:
@@ -84,15 +80,6 @@ class CodexCliClient:
             command.append("--ephemeral")
         command.append(prompt)
         return command
-
-
-def _invoke_string_callback(future: Future[str], callback: ResultCallback) -> None:
-    try:
-        callback(future.result())
-    except Exception:
-        return
-
-
 def _validate_concurrency(value: int) -> int:
     if 1 <= value <= 10:
         return value
