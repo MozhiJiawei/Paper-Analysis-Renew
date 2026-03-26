@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from concurrent.futures import Future
 import unittest
 from pathlib import Path
 
@@ -10,8 +11,10 @@ ROOT_DIR = Path(__file__).resolve().parents[2]
 
 
 class _FakeTranslator:
-    def translate(self, candidate: object) -> str:
-        return "中文摘要：" + str(candidate.title)
+    def submit_translate(self, candidate: object) -> Future[str]:
+        future: Future[str] = Future()
+        future.set_result("中文摘要：" + str(candidate.title))
+        return future
 
 
 class BenchmarkBuilderTests(unittest.TestCase):

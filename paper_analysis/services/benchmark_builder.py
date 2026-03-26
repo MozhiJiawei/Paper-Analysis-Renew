@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections import Counter, defaultdict
+from concurrent.futures import Future
 from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Protocol
@@ -199,7 +200,7 @@ class ScoredCandidatePaper:
 
 
 class AbstractTranslator(Protocol):
-    def translate(self, candidate: CandidatePaper) -> str: ...
+    def submit_translate(self, candidate: CandidatePaper) -> Future[str]: ...
 
 
 class BenchmarkBuilder:
@@ -259,7 +260,7 @@ class BenchmarkBuilder:
             evidence = _build_evidence(candidate)
             abstract_zh = candidate.abstract_zh
             if not abstract_zh and abstract_translator is not None:
-                abstract_zh = abstract_translator.translate(candidate)
+                abstract_zh = abstract_translator.submit_translate(candidate).result()
             records.append(
                 BenchmarkRecord(
                     paper_id=candidate.paper_id,

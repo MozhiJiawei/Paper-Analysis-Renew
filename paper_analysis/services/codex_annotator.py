@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from concurrent.futures import Future
 from dataclasses import dataclass, field
 from typing import Callable
 
@@ -17,49 +18,77 @@ class CodexCliAnnotator:
     client: CodexCliClient | None = None
     runner: Runner | None = None
     model: str | None = None
+    concurrency: int = 1
     labeler_id: str | None = None
     _client: CodexCliClient = field(init=False, repr=False)
     _labeler_id: str = field(init=False, repr=False)
 
     def __post_init__(self) -> None:
-        self._client = self.client or CodexCliClient(**_build_client_kwargs(self.runner, self.model))
+        self._client = self.client or CodexCliClient(
+            **_build_client_kwargs(self.runner, self.model, self.concurrency)
+        )
         self._labeler_id = self.labeler_id or _default_codex_labeler_id(self.model)
         self.labeler_id = self._labeler_id
 
-    def annotate(self, candidate: CandidatePaper) -> AnnotationRecord:
+    def submit_annotate(self, candidate: CandidatePaper) -> Future[AnnotationRecord]:
+        outer_future: Future[AnnotationRecord] = Future()
         prompts = [
             build_codex_annotation_prompt(candidate),
             build_codex_annotation_prompt(candidate, force_decision=True),
         ]
-        last_error: Exception | None = None
-        for prompt in prompts:
-            try:
-                payload = self._run_prompt(prompt)
-                data = parse_codex_annotation_payload(payload)
-                return AnnotationRecord(
-                    paper_id=candidate.paper_id,
-                    labeler_id=self._labeler_id,
-                    primary_research_object=str(data["primary_research_object"]),
-                    preference_labels=[str(item) for item in data["preference_labels"]],
-                    negative_tier=str(data["negative_tier"]),
-                    evidence_spans={
-                        str(key): [str(item) for item in value]
-                        for key, value in dict(data.get("evidence_spans", {})).items()
-                    },
-                    notes=str(data.get("notes", "")),
-                    review_status="pending",
-                )
-            except (RuntimeError, ValueError) as exc:
-                last_error = exc
-        if last_error is not None:
-            raise last_error
-        raise RuntimeError(f"Codex_CLI 预标失败：{candidate.paper_id}")
+        self._submit_attempt(candidate, prompts, 0, outer_future)
+        return outer_future
 
-    def _run_prompt(self, prompt: str) -> str:
+    def _submit_attempt(
+        self,
+        candidate: CandidatePaper,
+        prompts: list[str],
+        index: int,
+        outer_future: Future[AnnotationRecord],
+    ) -> None:
+        inner_future = self._client.submit(prompts[index])
+        inner_future.add_done_callback(
+            lambda done: self._handle_prompt_result(candidate, prompts, index, outer_future, done)
+        )
+
+    def _handle_prompt_result(
+        self,
+        candidate: CandidatePaper,
+        prompts: list[str],
+        index: int,
+        outer_future: Future[AnnotationRecord],
+        inner_future: Future[str],
+    ) -> None:
+        if outer_future.done():
+            return
         try:
-            return self._client.exec(prompt)
-        except RuntimeError as exc:
-            raise RuntimeError(f"Codex_CLI 预标失败：{exc}") from exc
+            data = parse_codex_annotation_payload(inner_future.result())
+            outer_future.set_result(self._build_annotation(candidate, data))
+            return
+        except (RuntimeError, ValueError) as exc:
+            if index + 1 < len(prompts):
+                self._submit_attempt(candidate, prompts, index + 1, outer_future)
+                return
+            outer_future.set_exception(exc)
+
+    def _build_annotation(
+        self,
+        candidate: CandidatePaper,
+        data: dict[str, object],
+    ) -> AnnotationRecord:
+        return AnnotationRecord(
+            paper_id=candidate.paper_id,
+            labeler_id=self._labeler_id,
+            primary_research_object=str(data["primary_research_object"]),
+            preference_labels=[str(item) for item in data["preference_labels"]],
+            negative_tier=str(data["negative_tier"]),
+            evidence_spans={
+                str(key): [str(item) for item in value]
+                for key, value in dict(data.get("evidence_spans", {})).items()
+            },
+            notes=str(data.get("notes", "")),
+            review_status="pending",
+        )
 
 
 def build_codex_annotation_prompt(candidate: CandidatePaper, *, force_decision: bool = False) -> str:
@@ -264,12 +293,17 @@ def _normalize_evidence_label(value: str) -> str:
     return "general"
 
 
-def _build_client_kwargs(runner: Runner | None, model: str | None) -> dict[str, object]:
+def _build_client_kwargs(
+    runner: Runner | None,
+    model: str | None,
+    concurrency: int,
+) -> dict[str, object]:
     kwargs: dict[str, object] = {}
     if runner is not None:
         kwargs["runner"] = runner
     if model is not None:
         kwargs["model"] = model
+    kwargs["concurrency"] = concurrency
     return kwargs
 
 

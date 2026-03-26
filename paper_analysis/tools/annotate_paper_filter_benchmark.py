@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from concurrent.futures import FIRST_COMPLETED, Future, wait
 
 from paper_analysis.services.annotation_repository import AnnotationRepository
 from paper_analysis.services.annotator_selection import build_annotator, resolve_annotation_backend
@@ -8,25 +9,42 @@ from paper_analysis.shared.paths import ROOT_DIR
 
 
 BENCHMARK_ROOT = ROOT_DIR / "data" / "benchmarks" / "paper-filter"
+DEFAULT_CONCURRENCY = 5
 
 
-def annotate_benchmark() -> dict[str, object]:
+def annotate_benchmark(*, concurrency: int = DEFAULT_CONCURRENCY) -> dict[str, object]:
     repository = AnnotationRepository(BENCHMARK_ROOT)
     backend = resolve_annotation_backend()
-    annotator = build_annotator(backend)
+    annotator = build_annotator(backend, concurrency=concurrency)
     candidates = repository.load_candidates()
     existing_annotations = repository.load_annotations(repository.annotations_ai_path)
     annotations_by_id = {annotation.paper_id: annotation for annotation in existing_annotations}
-    for candidate in candidates:
-        if candidate.paper_id in annotations_by_id:
-            continue
-        annotations_by_id[candidate.paper_id] = annotator.annotate(candidate)
-        repository.write_annotations(list(annotations_by_id.values()), repository.annotations_ai_path)
+    pending_candidates = [candidate for candidate in candidates if candidate.paper_id not in annotations_by_id]
+    pending_iter = iter(pending_candidates)
+    pending_futures: dict[Future[object], object] = {}
+
+    for _ in range(min(concurrency, len(pending_candidates))):
+        candidate = next(pending_iter, None)
+        if candidate is None:
+            break
+        pending_futures[annotator.submit_annotate(candidate)] = candidate
+
+    while pending_futures:
+        done, _ = wait(pending_futures.keys(), return_when=FIRST_COMPLETED)
+        for future in done:
+            candidate = pending_futures.pop(future)
+            annotations_by_id[candidate.paper_id] = future.result()
+            repository.write_annotations(list(annotations_by_id.values()), repository.annotations_ai_path)
+
+            next_candidate = next(pending_iter, None)
+            if next_candidate is not None:
+                pending_futures[annotator.submit_annotate(next_candidate)] = next_candidate
     return {
         "benchmark_root": str(BENCHMARK_ROOT),
         "total_records": len(candidates),
         "annotations_ai": len(annotations_by_id),
         "backend": backend,
+        "concurrency": concurrency,
     }
 
 

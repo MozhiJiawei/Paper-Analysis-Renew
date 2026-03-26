@@ -54,7 +54,7 @@ class CodexAnnotatorContractTests(unittest.TestCase):
         )
         payload = """{"primary_research_object":"LLM","preference_labels":["解码策略优化"],"negative_tier":"positive","evidence_spans":{"解码策略优化":["speculative decoding"]},"notes":"ok"}"""
         parsed = parse_codex_annotation_payload(payload)
-        annotation = CodexCliAnnotator(runner=lambda _: payload).annotate(candidate)
+        annotation = CodexCliAnnotator(runner=lambda _: payload).submit_annotate(candidate).result()
 
         self.assertEqual("LLM", parsed["primary_research_object"])
         self.assertEqual(["解码策略优化"], annotation.preference_labels)
@@ -79,7 +79,7 @@ class CodexAnnotatorContractTests(unittest.TestCase):
         annotation = CodexCliAnnotator(
             runner=lambda _: payload,
             model="gpt-5.1-codex-mini",
-        ).annotate(candidate)
+        ).submit_annotate(candidate).result()
 
         self.assertEqual("codex_cli", annotation.labeler_id)
 
@@ -100,7 +100,7 @@ class CodexAnnotatorContractTests(unittest.TestCase):
         payload = """{"primary_research_object":"LLM","preference_labels":["解码策略优化"],"negative_tier":"positive","evidence_spans":{"解码策略优化":["speculative decoding"]},"notes":"ok"}"""
         annotator = CodexCliAnnotator(client=CodexCliClient(runner=lambda _: payload))
 
-        annotation = annotator.annotate(candidate)
+        annotation = annotator.submit_annotate(candidate).result()
 
         self.assertEqual(["解码策略优化"], annotation.preference_labels)
         self.assertEqual("pending", annotation.review_status)
@@ -111,7 +111,7 @@ class CodexAnnotatorContractTests(unittest.TestCase):
         with patch("paper_analysis.services.codex_annotator.CodexCliClient") as client_cls:
             annotator = CodexCliAnnotator(runner=runner)
 
-        client_cls.assert_called_once_with(runner=runner)
+        client_cls.assert_called_once_with(runner=runner, concurrency=1)
         self.assertIsNotNone(annotator)
 
     def test_parse_negative_payload_clears_preference_labels(self) -> None:

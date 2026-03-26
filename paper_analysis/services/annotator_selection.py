@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+from concurrent.futures import Future
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -22,7 +23,7 @@ ANNOTATOR_SELECTION_FILE_NAME = "annotation_backend.json"
 class AnnotatorBackend(Protocol):
     labeler_id: str
 
-    def annotate(self, candidate: object) -> object: ...
+    def submit_annotate(self, candidate: object) -> Future[object]: ...
 
 
 @dataclass(slots=True)
@@ -44,6 +45,7 @@ def build_annotator(
     selection_config_path: Path | None = None,
     codex_runner: object | None = None,
     doubao_runner: object | None = None,
+    concurrency: int = 1,
 ) -> AnnotatorBackend:
     resolved_backend = resolve_annotation_backend(
         backend=backend,
@@ -53,10 +55,15 @@ def build_annotator(
         return CodexCliAnnotator(
             runner=codex_runner,
             model=DEFAULT_CODEX_CLI_MODEL,
+            concurrency=concurrency,
             labeler_id="codex_cli",
         )
     if resolved_backend == "doubao":
-        return DoubaoAnnotator(runner=doubao_runner, labeler_id="doubao")
+        return DoubaoAnnotator(
+            runner=doubao_runner,
+            concurrency=concurrency,
+            labeler_id="doubao",
+        )
     raise ValueError(f"不支持的预标后端：{resolved_backend}")
 
 

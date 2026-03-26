@@ -2,17 +2,20 @@ from __future__ import annotations
 
 import os
 import subprocess
-from dataclasses import dataclass
+import threading
+from concurrent.futures import Future, ThreadPoolExecutor
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable
 
 
 Runner = Callable[[str], str]
+ResultCallback = Callable[[str], None]
 
 
 @dataclass(slots=True)
 class CodexCliClient:
-    """轻量 Codex CLI 调用器，可被多个线程共享复用。"""
+    """轻量 Codex CLI 异步调用器，可被多个线程共享复用。"""
 
     runner: Runner | None = None
     cwd: Path | None = None
@@ -20,8 +23,21 @@ class CodexCliClient:
     model: str | None = None
     json_mode: bool = False
     ephemeral: bool = False
+    concurrency: int = 1
+    _executor: ThreadPoolExecutor | None = field(init=False, default=None, repr=False)
+    _executor_lock: threading.Lock = field(init=False, repr=False)
 
-    def exec(self, prompt: str) -> str:
+    def __post_init__(self) -> None:
+        self.concurrency = _validate_concurrency(self.concurrency)
+        self._executor_lock = threading.Lock()
+
+    def submit(self, prompt: str, callback: ResultCallback | None = None) -> Future[str]:
+        future = self._get_executor().submit(self._run_prompt_sync, prompt)
+        if callback is not None:
+            future.add_done_callback(lambda done: _invoke_string_callback(done, callback))
+        return future
+
+    def _run_prompt_sync(self, prompt: str) -> str:
         if self.runner is not None:
             return self.runner(prompt)
         try:
@@ -46,6 +62,14 @@ class CodexCliClient:
             )
         return result.stdout.strip()
 
+    def _get_executor(self) -> ThreadPoolExecutor:
+        if self._executor is not None:
+            return self._executor
+        with self._executor_lock:
+            if self._executor is None:
+                self._executor = ThreadPoolExecutor(max_workers=self.concurrency)
+        return self._executor
+
     def _build_command(self, prompt: str) -> list[str]:
         command = [
             "codex.cmd" if os.name == "nt" else "codex",
@@ -60,3 +84,16 @@ class CodexCliClient:
             command.append("--ephemeral")
         command.append(prompt)
         return command
+
+
+def _invoke_string_callback(future: Future[str], callback: ResultCallback) -> None:
+    try:
+        callback(future.result())
+    except Exception:
+        return
+
+
+def _validate_concurrency(value: int) -> int:
+    if 1 <= value <= 10:
+        return value
+    raise ValueError(f"Codex CLI 并发非法：{value}；允许范围：1~10")

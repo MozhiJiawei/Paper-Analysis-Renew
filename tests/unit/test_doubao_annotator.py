@@ -54,7 +54,7 @@ class DoubaoAnnotatorTests(unittest.TestCase):
             config_path=Path("missing.yaml"),
         )
 
-        annotation = annotator.annotate(candidate)
+        annotation = annotator.submit_annotate(candidate).result()
 
         self.assertEqual("doubao", annotation.labeler_id)
         self.assertEqual(["解码策略优化"], annotation.preference_labels)
@@ -79,7 +79,7 @@ class DoubaoAnnotatorTests(unittest.TestCase):
         )
 
         with self.assertRaises(RuntimeError):
-            annotator.annotate(candidate)
+            annotator.submit_annotate(candidate).result()
 
 
 if __name__ == "__main__":

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
-from concurrent.futures import FIRST_COMPLETED, Future, ThreadPoolExecutor, wait
+from concurrent.futures import FIRST_COMPLETED, Future, wait
 
 from paper_analysis.domain.benchmark import BenchmarkRecord
 from paper_analysis.services.annotation_repository import AnnotationRepository
@@ -22,7 +22,7 @@ def backfill_abstract_zh(
     checkpoint_every: int = DEFAULT_CHECKPOINT_EVERY,
 ) -> dict[str, object]:
     repository = AnnotationRepository(BENCHMARK_ROOT)
-    translator = DoubaoAbstractTranslator()
+    translator = DoubaoAbstractTranslator(concurrency=workers)
     records = repository.load_records()
     pending_indexes = [index for index, record in enumerate(records) if _needs_backfill(record)]
     if limit is not None:
@@ -38,37 +38,35 @@ def backfill_abstract_zh(
             "checkpoint_every": checkpoint_every,
         }
 
-    workers = max(1, workers)
     checkpoint_every = max(1, checkpoint_every)
     updated_records = list(records)
     translated_count = 0
 
-    with ThreadPoolExecutor(max_workers=workers) as executor:
-        pending_futures: dict[Future[BenchmarkRecord], int] = {}
-        pending_iter = iter(pending_indexes)
+    pending_futures: dict[Future[BenchmarkRecord], int] = {}
+    pending_iter = iter(pending_indexes)
 
-        for _ in range(min(workers, len(pending_indexes))):
-            index = next(pending_iter, None)
-            if index is None:
-                break
-            future = executor.submit(_translate_record, records[index], translator)
-            pending_futures[future] = index
+    for _ in range(min(workers, len(pending_indexes))):
+        index = next(pending_iter, None)
+        if index is None:
+            break
+        future = _submit_translate_record(records[index], translator)
+        pending_futures[future] = index
 
-        while pending_futures:
-            done, _ = wait(pending_futures.keys(), return_when=FIRST_COMPLETED)
-            for future in done:
-                index = pending_futures.pop(future)
-                translated_record = future.result()
-                updated_records[index] = translated_record
-                translated_count += 1
+    while pending_futures:
+        done, _ = wait(pending_futures.keys(), return_when=FIRST_COMPLETED)
+        for future in done:
+            index = pending_futures.pop(future)
+            translated_record = future.result()
+            updated_records[index] = translated_record
+            translated_count += 1
 
-                if translated_count % checkpoint_every == 0:
-                    repository.write_records(updated_records)
+            if translated_count % checkpoint_every == 0:
+                repository.write_records(updated_records)
 
-                next_index = next(pending_iter, None)
-                if next_index is not None:
-                    next_future = executor.submit(_translate_record, records[next_index], translator)
-                    pending_futures[next_future] = next_index
+            next_index = next(pending_iter, None)
+            if next_index is not None:
+                next_future = _submit_translate_record(records[next_index], translator)
+                pending_futures[next_future] = next_index
 
     repository.write_records(updated_records)
     remaining_records = sum(1 for record in updated_records if _needs_backfill(record))
@@ -114,13 +112,30 @@ def _needs_backfill(record: BenchmarkRecord) -> bool:
     # 覆盖测试或占位流程写入的伪中文摘要。
     return record.abstract_zh.strip() == f"中文摘要：{record.title}"
 
-
-def _translate_record(
+def _submit_translate_record(
     record: BenchmarkRecord,
     translator: DoubaoAbstractTranslator,
-) -> BenchmarkRecord:
-    candidate = record.to_candidate_paper()
-    abstract_zh = translator.translate(candidate)
+) -> Future[BenchmarkRecord]:
+    outer_future: Future[BenchmarkRecord] = Future()
+    inner_future = translator.submit_translate(record.to_candidate_paper())
+    inner_future.add_done_callback(lambda done: _resolve_translated_record(record, done, outer_future))
+    return outer_future
+
+
+def _resolve_translated_record(
+    record: BenchmarkRecord,
+    inner_future: Future[str],
+    outer_future: Future[BenchmarkRecord],
+) -> None:
+    if outer_future.done():
+        return
+    try:
+        outer_future.set_result(_build_translated_record(record, inner_future.result()))
+    except Exception as exc:
+        outer_future.set_exception(exc)
+
+
+def _build_translated_record(record: BenchmarkRecord, abstract_zh: str) -> BenchmarkRecord:
     return BenchmarkRecord(
         paper_id=record.paper_id,
         title=record.title,

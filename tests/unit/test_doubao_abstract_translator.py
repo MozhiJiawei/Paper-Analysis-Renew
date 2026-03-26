@@ -69,7 +69,7 @@ class DoubaoAbstractTranslatorTests(unittest.TestCase):
             runner=lambda _: {"success": True, "content": "这是中文摘要。"},
             config_path=Path("missing.yaml"),
         )
-        self.assertEqual("这是中文摘要。", translator.translate(candidate))
+        self.assertEqual("这是中文摘要。", translator.submit_translate(candidate).result())
 
     def test_runner_failure_raises_runtime_error(self) -> None:
         candidate = CandidatePaper(
@@ -92,7 +92,7 @@ class DoubaoAbstractTranslatorTests(unittest.TestCase):
             config_path=Path("missing.yaml"),
         )
         with self.assertRaises(RuntimeError):
-            translator.translate(candidate)
+            translator.submit_translate(candidate).result()
 
     def test_translator_does_not_depend_on_example_config(self) -> None:
         candidate = CandidatePaper(
@@ -114,7 +114,7 @@ class DoubaoAbstractTranslatorTests(unittest.TestCase):
             runner=lambda _: {"success": True, "content": "这是中文摘要。"},
             config_path=Path("definitely-not-example.yaml"),
         )
-        self.assertEqual("这是中文摘要。", translator.translate(candidate))
+        self.assertEqual("这是中文摘要。", translator.submit_translate(candidate).result())
 
     def test_translator_passes_config_to_client(self) -> None:
         with patch("paper_analysis.services.doubao_abstract_translator.DoubaoClient") as client_cls:
@@ -132,10 +132,16 @@ class DoubaoAbstractTranslatorTests(unittest.TestCase):
             base_url="https://example.test",
             model="model-x",
             config_path=Path("custom.yaml"),
+            concurrency=1,
         )
 
 
 class DoubaoClientTests(unittest.TestCase):
+    def test_invalid_concurrency_raises_value_error(self) -> None:
+        for value in (0, -1, 11):
+            with self.assertRaises(ValueError):
+                DoubaoClient(concurrency=value, config_path=Path("missing.yaml"))
+
     def test_explicit_config_has_highest_priority(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             config_path = Path(temp_dir) / "doubao.yaml"
@@ -197,7 +203,7 @@ class DoubaoClientTests(unittest.TestCase):
             client = DoubaoClient(config_path=Path("missing.yaml"))
 
         with self.assertRaises(ValueError) as context:
-            client.chat([{"role": "user", "content": "hi"}])
+            client.submit([{"role": "user", "content": "hi"}]).result()
 
         self.assertIn("ARK_API_KEY", str(context.exception))
         self.assertIn(".paper-analysis", str(context.exception))
@@ -210,10 +216,22 @@ class DoubaoClientTests(unittest.TestCase):
         )
 
         with patch.object(DoubaoClient, "_get_client", side_effect=AssertionError("should not create sdk client")):
-            result = client.chat([{"role": "user", "content": "hi"}])
+            result = client.submit([{"role": "user", "content": "hi"}]).result()
 
         self.assertTrue(result["success"])
         self.assertEqual("ok", result["content"])
+
+    def test_submit_invokes_callback_on_success(self) -> None:
+        received: list[dict[str, object]] = []
+        client = DoubaoClient(
+            runner=lambda _: {"success": True, "content": "ok", "usage": None},
+            config_path=Path("missing.yaml"),
+        )
+
+        future = client.submit([{"role": "user", "content": "hi"}], callback=received.append)
+
+        self.assertTrue(future.result()["success"])
+        self.assertEqual("ok", received[0]["content"])
 
     def test_sdk_response_is_normalized(self) -> None:
         response = SimpleNamespace(
@@ -230,7 +248,7 @@ class DoubaoClientTests(unittest.TestCase):
         client = DoubaoClient(api_key="key", config_path=Path("missing.yaml"))
 
         with patch.object(DoubaoClient, "_get_client", return_value=fake_sdk_client):
-            result = client.chat([{"role": "user", "content": "hi"}])
+            result = client.submit([{"role": "user", "content": "hi"}]).result()
 
         self.assertEqual(
             {
@@ -257,7 +275,7 @@ class DoubaoClientTests(unittest.TestCase):
         client = DoubaoClient(api_key="key", config_path=Path("missing.yaml"))
 
         with patch.object(DoubaoClient, "_get_client", return_value=fake_sdk_client):
-            result = client.chat([{"role": "user", "content": "hi"}])
+            result = client.submit([{"role": "user", "content": "hi"}]).result()
 
         self.assertFalse(result["success"])
         self.assertEqual("boom", result["error"])
@@ -283,7 +301,7 @@ class DoubaoClientTests(unittest.TestCase):
                 audit_log_path=audit_path,
             )
 
-            result = client.chat([{"role": "user", "content": "hi"}])
+            result = client.submit([{"role": "user", "content": "hi"}]).result()
 
             self.assertTrue(result["success"])
             lines = audit_path.read_text(encoding="utf-8").splitlines()
@@ -318,7 +336,7 @@ class DoubaoClientTests(unittest.TestCase):
             )
 
             with patch.object(DoubaoClient, "_get_client", return_value=fake_sdk_client):
-                result = client.chat([{"role": "user", "content": "hi"}])
+                result = client.submit([{"role": "user", "content": "hi"}]).result()
 
             self.assertFalse(result["success"])
             lines = audit_path.read_text(encoding="utf-8").splitlines()

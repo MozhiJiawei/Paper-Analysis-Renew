@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from concurrent.futures import Future
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable
@@ -22,6 +23,7 @@ class DoubaoAnnotator:
     base_url: str | None = None
     model: str | None = None
     config_path: Path | None = None
+    concurrency: int = 1
     labeler_id: str = "doubao"
     _client: DoubaoClient = field(init=False, repr=False)
 
@@ -32,45 +34,77 @@ class DoubaoAnnotator:
             base_url=self.base_url,
             model=self.model,
             config_path=self.config_path,
+            concurrency=self.concurrency,
         )
 
-    def annotate(self, candidate: CandidatePaper) -> AnnotationRecord:
+    def submit_annotate(self, candidate: CandidatePaper) -> Future[AnnotationRecord]:
+        outer_future: Future[AnnotationRecord] = Future()
         prompts = [
             build_doubao_annotation_messages(candidate),
             build_doubao_annotation_messages(candidate, force_decision=True),
         ]
-        last_error: Exception | None = None
-        for messages in prompts:
-            try:
-                payload = self._run_messages(messages)
-                data = parse_codex_annotation_payload(payload)
-                return AnnotationRecord(
-                    paper_id=candidate.paper_id,
-                    labeler_id=self.labeler_id,
-                    primary_research_object=str(data["primary_research_object"]),
-                    preference_labels=[str(item) for item in data["preference_labels"]],
-                    negative_tier=str(data["negative_tier"]),
-                    evidence_spans={
-                        str(key): [str(item) for item in value]
-                        for key, value in dict(data.get("evidence_spans", {})).items()
-                    },
-                    notes=str(data.get("notes", "")),
-                    review_status="pending",
-                )
-            except (RuntimeError, ValueError) as exc:
-                last_error = exc
-        if last_error is not None:
-            raise last_error
-        raise RuntimeError(f"Doubao 预标失败：{candidate.paper_id}")
+        self._submit_attempt(candidate, prompts, 0, outer_future)
+        return outer_future
 
-    def _run_messages(self, messages: list[dict[str, str]]) -> str:
-        result = self._client.chat(messages, stream=False)
+    def _submit_attempt(
+        self,
+        candidate: CandidatePaper,
+        prompts: list[list[dict[str, str]]],
+        index: int,
+        outer_future: Future[AnnotationRecord],
+    ) -> None:
+        inner_future = self._client.submit(prompts[index], stream=False)
+        inner_future.add_done_callback(
+            lambda done: self._handle_messages_result(candidate, prompts, index, outer_future, done)
+        )
+
+    def _handle_messages_result(
+        self,
+        candidate: CandidatePaper,
+        prompts: list[list[dict[str, str]]],
+        index: int,
+        outer_future: Future[AnnotationRecord],
+        inner_future: Future[dict[str, object]],
+    ) -> None:
+        if outer_future.done():
+            return
+        try:
+            payload = self._extract_payload(inner_future.result())
+            data = parse_codex_annotation_payload(payload)
+            outer_future.set_result(self._build_annotation(candidate, data))
+            return
+        except (RuntimeError, ValueError) as exc:
+            if index + 1 < len(prompts):
+                self._submit_attempt(candidate, prompts, index + 1, outer_future)
+                return
+            outer_future.set_exception(exc)
+
+    def _extract_payload(self, result: dict[str, object]) -> str:
         if not result.get("success"):
             raise RuntimeError(f"Doubao 预标失败：{result.get('error', '未知错误')}")
         content = str(result.get("content", "")).strip()
         if not content:
             raise ValueError("Doubao 未返回内容")
         return content
+
+    def _build_annotation(
+        self,
+        candidate: CandidatePaper,
+        data: dict[str, object],
+    ) -> AnnotationRecord:
+        return AnnotationRecord(
+            paper_id=candidate.paper_id,
+            labeler_id=self.labeler_id,
+            primary_research_object=str(data["primary_research_object"]),
+            preference_labels=[str(item) for item in data["preference_labels"]],
+            negative_tier=str(data["negative_tier"]),
+            evidence_spans={
+                str(key): [str(item) for item in value]
+                for key, value in dict(data.get("evidence_spans", {})).items()
+            },
+            notes=str(data.get("notes", "")),
+            review_status="pending",
+        )
 
 
 def build_doubao_annotation_messages(

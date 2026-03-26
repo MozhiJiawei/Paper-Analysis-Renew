@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from concurrent.futures import Future
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable
@@ -18,6 +19,7 @@ class DoubaoAbstractTranslator:
     base_url: str | None = None
     model: str | None = None
     config_path: Path | None = None
+    concurrency: int = 1
     _client: DoubaoClient = field(init=False, repr=False)
 
     def __post_init__(self) -> None:
@@ -27,17 +29,34 @@ class DoubaoAbstractTranslator:
             base_url=self.base_url,
             model=self.model,
             config_path=self.config_path,
+            concurrency=self.concurrency,
         )
 
-    def translate(self, candidate: CandidatePaper) -> str:
+    def submit_translate(self, candidate: CandidatePaper) -> Future[str]:
+        outer_future: Future[str] = Future()
         abstract = candidate.abstract.strip()
         if not abstract:
-            return ""
+            outer_future.set_result("")
+            return outer_future
         messages = build_doubao_abstract_translation_messages(candidate)
-        result = self._client.chat(messages, stream=False)
-        if not result.get("success"):
-            raise RuntimeError(f"Doubao 中文摘要生成失败：{result.get('error', '未知错误')}")
-        return parse_doubao_abstract_translation_payload(str(result.get("content", "")))
+        inner_future = self._client.submit(messages, stream=False)
+        inner_future.add_done_callback(lambda done: self._handle_translation_result(done, outer_future))
+        return outer_future
+
+    def _handle_translation_result(
+        self,
+        inner_future: Future[dict[str, Any]],
+        outer_future: Future[str],
+    ) -> None:
+        if outer_future.done():
+            return
+        try:
+            result = inner_future.result()
+            if not result.get("success"):
+                raise RuntimeError(f"Doubao 中文摘要生成失败：{result.get('error', '未知错误')}")
+            outer_future.set_result(parse_doubao_abstract_translation_payload(str(result.get("content", ""))))
+        except Exception as exc:
+            outer_future.set_exception(exc)
 
 
 def build_doubao_abstract_translation_messages(candidate: CandidatePaper) -> list[dict[str, str]]:

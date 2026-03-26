@@ -4,7 +4,6 @@ import subprocess
 import tempfile
 import time
 import unittest
-from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -13,22 +12,27 @@ from paper_analysis.utils.codex_cli_client import CodexCliClient
 
 
 class CodexCliClientTests(unittest.TestCase):
-    def test_runner_short_circuits_subprocess(self) -> None:
+    def test_submit_runner_short_circuits_subprocess(self) -> None:
         client = CodexCliClient(runner=lambda prompt: f"ok:{prompt}")
 
         with patch("paper_analysis.utils.codex_cli_client.subprocess.run") as mocked_run:
-            result = client.exec("hello")
+            result = client.submit("hello").result()
 
         self.assertEqual("ok:hello", result)
         mocked_run.assert_not_called()
 
-    def test_non_zero_returncode_raises_runtime_error(self) -> None:
+    def test_invalid_concurrency_raises_value_error(self) -> None:
+        for value in (0, -1, 11):
+            with self.assertRaises(ValueError):
+                CodexCliClient(concurrency=value)
+
+    def test_submit_non_zero_returncode_raises_runtime_error(self) -> None:
         client = CodexCliClient()
         completed = SimpleNamespace(returncode=2, stdout="fallback", stderr="boom")
 
         with patch("paper_analysis.utils.codex_cli_client.subprocess.run", return_value=completed):
             with self.assertRaises(RuntimeError) as context:
-                client.exec("hello")
+                client.submit("hello").result()
 
         self.assertIn("returncode=2", str(context.exception))
         self.assertIn("boom", str(context.exception))
@@ -39,7 +43,7 @@ class CodexCliClientTests(unittest.TestCase):
 
         with patch("paper_analysis.utils.codex_cli_client.os.name", "nt"):
             with patch("paper_analysis.utils.codex_cli_client.subprocess.run", return_value=completed) as mocked_run:
-                client.exec("hello")
+                client.submit("hello").result()
 
         command = mocked_run.call_args.args[0]
         self.assertEqual("codex.cmd", command[0])
@@ -50,12 +54,12 @@ class CodexCliClientTests(unittest.TestCase):
 
         with patch("paper_analysis.utils.codex_cli_client.os.name", "posix"):
             with patch("paper_analysis.utils.codex_cli_client.subprocess.run", return_value=completed) as mocked_run:
-                client.exec("hello")
+                client.submit("hello").result()
 
         command = mocked_run.call_args.args[0]
         self.assertEqual("codex", command[0])
 
-    def test_exec_passes_json_ephemeral_cwd_and_timeout(self) -> None:
+    def test_submit_passes_json_ephemeral_cwd_and_timeout(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             client = CodexCliClient(
                 cwd=Path(temp_dir),
@@ -67,7 +71,7 @@ class CodexCliClientTests(unittest.TestCase):
             completed = SimpleNamespace(returncode=0, stdout="ok\n", stderr="")
 
             with patch("paper_analysis.utils.codex_cli_client.subprocess.run", return_value=completed) as mocked_run:
-                client.exec("hello")
+                client.submit("hello").result()
 
         command = mocked_run.call_args.args[0]
         kwargs = mocked_run.call_args.kwargs
@@ -97,7 +101,7 @@ class CodexCliClientTests(unittest.TestCase):
             side_effect=subprocess.TimeoutExpired(cmd="codex", timeout=3),
         ):
             with self.assertRaises(RuntimeError) as context:
-                client.exec("hello")
+                client.submit("hello").result()
 
         self.assertIn("超时", str(context.exception))
         self.assertIn("3", str(context.exception))
@@ -108,20 +112,29 @@ class CodexCliClientTests(unittest.TestCase):
 
         with patch("paper_analysis.utils.codex_cli_client.subprocess.run", return_value=completed):
             with self.assertRaises(RuntimeError) as context:
-                client.exec("hello")
+                client.submit("hello").result()
 
         self.assertIn("gpt-5.1-codex-mini", str(context.exception))
 
+    def test_submit_invokes_callback_on_success(self) -> None:
+        received: list[str] = []
+        client = CodexCliClient(runner=lambda prompt: f"ok:{prompt}")
+
+        future = client.submit("hello", callback=received.append)
+
+        self.assertEqual("ok:hello", future.result())
+        self.assertEqual(["ok:hello"], received)
+
     def test_shared_client_can_be_reused_concurrently(self) -> None:
         def runner(prompt: str) -> str:
-            time.sleep(0.01)
+            time.sleep(0.01 if prompt.endswith("0") else 0.001)
             return f"done:{prompt}"
 
-        client = CodexCliClient(runner=runner)
+        client = CodexCliClient(runner=runner, concurrency=4)
         prompts = [f"prompt-{index}" for index in range(8)]
+        futures = [client.submit(prompt) for prompt in prompts]
 
-        with ThreadPoolExecutor(max_workers=4) as executor:
-            results = list(executor.map(client.exec, prompts))
+        results = [future.result() for future in futures]
 
         self.assertEqual([f"done:{prompt}" for prompt in prompts], results)
 
