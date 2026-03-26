@@ -16,10 +16,15 @@ Runner = Callable[[str], str]
 class CodexCliAnnotator:
     client: CodexCliClient | None = None
     runner: Runner | None = None
+    model: str | None = None
+    labeler_id: str | None = None
     _client: CodexCliClient = field(init=False, repr=False)
+    _labeler_id: str = field(init=False, repr=False)
 
     def __post_init__(self) -> None:
-        self._client = self.client or CodexCliClient(runner=self.runner)
+        self._client = self.client or CodexCliClient(**_build_client_kwargs(self.runner, self.model))
+        self._labeler_id = self.labeler_id or _default_codex_labeler_id(self.model)
+        self.labeler_id = self._labeler_id
 
     def annotate(self, candidate: CandidatePaper) -> AnnotationRecord:
         prompts = [
@@ -33,7 +38,7 @@ class CodexCliAnnotator:
                 data = parse_codex_annotation_payload(payload)
                 return AnnotationRecord(
                     paper_id=candidate.paper_id,
-                    labeler_id="codex_cli",
+                    labeler_id=self._labeler_id,
                     primary_research_object=str(data["primary_research_object"]),
                     preference_labels=[str(item) for item in data["preference_labels"]],
                     negative_tier=str(data["negative_tier"]),
@@ -257,3 +262,16 @@ def _normalize_evidence_label(value: str) -> str:
         if stripped == label or label in stripped or stripped in label:
             return label
     return "general"
+
+
+def _build_client_kwargs(runner: Runner | None, model: str | None) -> dict[str, object]:
+    kwargs: dict[str, object] = {}
+    if runner is not None:
+        kwargs["runner"] = runner
+    if model is not None:
+        kwargs["model"] = model
+    return kwargs
+
+
+def _default_codex_labeler_id(model: str | None) -> str:
+    return "codex_cli"

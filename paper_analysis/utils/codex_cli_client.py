@@ -17,6 +17,7 @@ class CodexCliClient:
     runner: Runner | None = None
     cwd: Path | None = None
     timeout: int | None = None
+    model: str | None = None
     json_mode: bool = False
     ephemeral: bool = False
 
@@ -35,11 +36,13 @@ class CodexCliClient:
                 timeout=self.timeout,
             )
         except subprocess.TimeoutExpired as exc:
-            raise RuntimeError(f"Codex CLI 调用超时：timeout={self.timeout}s") from exc
+            model_detail = f"; model={self.model}" if self.model else ""
+            raise RuntimeError(f"Codex CLI 调用超时：timeout={self.timeout}s{model_detail}") from exc
         if result.returncode != 0:
             detail = result.stderr.strip() or result.stdout.strip() or "未知错误"
+            model_detail = f"; model={self.model}" if self.model else ""
             raise RuntimeError(
-                f"Codex CLI 调用失败：returncode={result.returncode}; {detail}"
+                f"Codex CLI 调用失败：returncode={result.returncode}{model_detail}; {detail}"
             )
         return result.stdout.strip()
 
@@ -47,8 +50,10 @@ class CodexCliClient:
         command = [
             "codex.cmd" if os.name == "nt" else "codex",
             "exec",
-            "--dangerously-bypass-approvals-and-sandbox",
         ]
+        if self.model:
+            command.extend(["-m", self.model])
+        command.append("--dangerously-bypass-approvals-and-sandbox")
         if self.json_mode:
             command.append("--json")
         if self.ephemeral:

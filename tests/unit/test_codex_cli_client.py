@@ -60,6 +60,7 @@ class CodexCliClientTests(unittest.TestCase):
             client = CodexCliClient(
                 cwd=Path(temp_dir),
                 timeout=12,
+                model="gpt-5.1-codex-mini",
                 json_mode=True,
                 ephemeral=True,
             )
@@ -74,6 +75,8 @@ class CodexCliClientTests(unittest.TestCase):
             [
                 command[0],
                 "exec",
+                "-m",
+                "gpt-5.1-codex-mini",
                 "--dangerously-bypass-approvals-and-sandbox",
                 "--json",
                 "--ephemeral",
@@ -98,6 +101,16 @@ class CodexCliClientTests(unittest.TestCase):
 
         self.assertIn("超时", str(context.exception))
         self.assertIn("3", str(context.exception))
+
+    def test_error_message_contains_model_when_configured(self) -> None:
+        client = CodexCliClient(model="gpt-5.1-codex-mini")
+        completed = SimpleNamespace(returncode=2, stdout="", stderr="boom")
+
+        with patch("paper_analysis.utils.codex_cli_client.subprocess.run", return_value=completed):
+            with self.assertRaises(RuntimeError) as context:
+                client.exec("hello")
+
+        self.assertIn("gpt-5.1-codex-mini", str(context.exception))
 
     def test_shared_client_can_be_reused_concurrently(self) -> None:
         def runner(prompt: str) -> str:

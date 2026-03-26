@@ -74,6 +74,27 @@ class CliHelpTests(unittest.TestCase):
         self.assertIn("--subscription-date", result.stdout)
         self.assertIn("--max-results", result.stdout)
 
+    def test_quality_help_lists_stable_quality_commands(self) -> None:
+        env = os.environ.copy()
+        env["PYTHONUTF8"] = "1"
+        env["PYTHONIOENCODING"] = "utf-8"
+
+        result = subprocess.run(
+            [sys.executable, "-m", "paper_analysis.cli.main", "quality", "--help"],
+            cwd=ROOT_DIR,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            env=env,
+            check=False,
+        )
+
+        self.assertEqual(0, result.returncode)
+        self.assertIn("local-ci", result.stdout)
+        self.assertIn("lint", result.stdout)
+        self.assertNotIn("\ufffd", result.stdout)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 
 from paper_analysis.services.annotation_repository import AnnotationRepository
-from paper_analysis.services.codex_annotator import CodexCliAnnotator
+from paper_analysis.services.annotator_selection import build_annotator, resolve_annotation_backend
 from paper_analysis.shared.paths import ROOT_DIR
 
 
@@ -12,7 +12,8 @@ BENCHMARK_ROOT = ROOT_DIR / "data" / "benchmarks" / "paper-filter"
 
 def annotate_benchmark() -> dict[str, object]:
     repository = AnnotationRepository(BENCHMARK_ROOT)
-    annotator = CodexCliAnnotator()
+    backend = resolve_annotation_backend()
+    annotator = build_annotator(backend)
     candidates = repository.load_candidates()
     existing_annotations = repository.load_annotations(repository.annotations_ai_path)
     annotations_by_id = {annotation.paper_id: annotation for annotation in existing_annotations}
@@ -25,6 +26,7 @@ def annotate_benchmark() -> dict[str, object]:
         "benchmark_root": str(BENCHMARK_ROOT),
         "total_records": len(candidates),
         "annotations_ai": len(annotations_by_id),
+        "backend": backend,
     }
 
 

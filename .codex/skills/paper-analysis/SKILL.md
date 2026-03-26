@@ -53,6 +53,7 @@ description: "Use when working in this repository on conference paper filtering,
 - 顶会链路优先复用 `conference` 命名空间，不新增 `recommend`
 - arXiv 链路优先复用 `arxiv` 命名空间，不在入口层做新的偏好产品面
 - 质量检查默认运行 `quality local-ci`
+- AI 预标默认链路使用 `codex_cli` 小模型，`doubao` 仅作为可切换备选后端
 - 文本产物与文档统一使用 UTF-8
 
 完整路由示例见：

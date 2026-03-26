@@ -60,6 +60,29 @@ class CodexAnnotatorContractTests(unittest.TestCase):
         self.assertEqual(["解码策略优化"], annotation.preference_labels)
         self.assertEqual("codex_cli", annotation.labeler_id)
 
+    def test_small_codex_model_keeps_codex_cli_labeler_id(self) -> None:
+        candidate = CandidatePaper(
+            paper_id="paper-spark",
+            title="Prompt Test",
+            abstract="About speculative decoding.",
+            authors=["Alice"],
+            venue="ICLR 2025",
+            year=2025,
+            source="conference",
+            source_path="tests.json",
+            primary_research_object="LLM",
+            candidate_preference_labels=["解码策略优化"],
+            candidate_negative_tier="positive",
+        )
+        payload = """{"primary_research_object":"LLM","preference_labels":["解码策略优化"],"negative_tier":"positive","evidence_spans":{"解码策略优化":["speculative decoding"]},"notes":"ok"}"""
+
+        annotation = CodexCliAnnotator(
+            runner=lambda _: payload,
+            model="gpt-5.1-codex-mini",
+        ).annotate(candidate)
+
+        self.assertEqual("codex_cli", annotation.labeler_id)
+
     def test_annotator_accepts_shared_client(self) -> None:
         candidate = CandidatePaper(
             paper_id="paper-2",

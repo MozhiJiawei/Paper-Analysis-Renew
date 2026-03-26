@@ -279,7 +279,7 @@ class BenchmarkBuilder:
                     final_primary_research_object=candidate.primary_research_object,
                     final_preference_labels=candidate.candidate_preference_labels,
                     final_negative_tier=candidate.candidate_negative_tier,
-                    final_labeler_ids=["codex_cli", "human_reviewer"],
+                    final_labeler_ids=["candidate_seed", "human_reviewer"],
                     final_review_status="final",
                     final_evidence_spans=evidence,
                 )
