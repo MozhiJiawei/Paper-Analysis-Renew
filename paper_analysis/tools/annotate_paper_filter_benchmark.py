@@ -17,13 +17,13 @@ def annotate_benchmark(*, concurrency: int = DEFAULT_CONCURRENCY) -> dict[str, o
     backend = resolve_annotation_backend()
     annotator = build_annotator(backend, concurrency=concurrency)
     candidates = repository.load_candidates()
-    existing_annotations = repository.load_annotations(repository.annotations_ai_path)
-    annotations_by_id = {annotation.paper_id: annotation for annotation in existing_annotations}
-    pending_candidates = [candidate for candidate in candidates if candidate.paper_id not in annotations_by_id]
-    pending_iter = iter(pending_candidates)
+    annotations_by_id: dict[str, object] = {}
+    pending_iter = iter(candidates)
     pending_futures: dict[Future[object], object] = {}
 
-    for _ in range(min(concurrency, len(pending_candidates))):
+    repository.write_annotations([], repository.annotations_ai_path)
+
+    for _ in range(min(concurrency, len(candidates))):
         candidate = next(pending_iter, None)
         if candidate is None:
             break

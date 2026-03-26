@@ -16,7 +16,7 @@ def _resolved_future(value: object) -> Future[object]:
 
 
 class AnnotateBenchmarkToolTests(unittest.TestCase):
-    def test_annotate_benchmark_submits_only_missing_candidates(self) -> None:
+    def test_annotate_benchmark_regenerates_all_candidates(self) -> None:
         candidate_1 = CandidatePaper(
             paper_id="paper-1",
             title="A",
@@ -39,7 +39,7 @@ class AnnotateBenchmarkToolTests(unittest.TestCase):
             source_path="tests.json",
             primary_research_object="LLM",
         )
-        existing = AnnotationRecord(
+        annotation_1 = AnnotationRecord(
             paper_id="paper-1",
             labeler_id="codex_cli",
             primary_research_object="LLM",
@@ -64,7 +64,7 @@ class AnnotateBenchmarkToolTests(unittest.TestCase):
                 return [candidate_1, candidate_2]
 
             def load_annotations(self, _path: str) -> list[AnnotationRecord]:
-                return [existing]
+                return [annotation_1]
 
             def write_annotations(self, annotations: list[AnnotationRecord], _path: str) -> None:
                 writes.append(list(annotations))
@@ -74,6 +74,8 @@ class AnnotateBenchmarkToolTests(unittest.TestCase):
 
             def submit_annotate(self, candidate: CandidatePaper) -> Future[AnnotationRecord]:
                 submitted.append(candidate.paper_id)
+                if candidate.paper_id == "paper-1":
+                    return _resolved_future(annotation_1)
                 return _resolved_future(new_annotation)
 
         with patch("paper_analysis.tools.annotate_paper_filter_benchmark.AnnotationRepository", return_value=FakeRepository()):
@@ -81,9 +83,12 @@ class AnnotateBenchmarkToolTests(unittest.TestCase):
                 with patch("paper_analysis.tools.annotate_paper_filter_benchmark.build_annotator", return_value=FakeAnnotator()) as build_annotator:
                     summary = annotate_benchmark(concurrency=3)
 
-        self.assertEqual(["paper-2"], submitted)
-        self.assertEqual(1, len(writes))
-        self.assertEqual({"paper-1", "paper-2"}, {item.paper_id for item in writes[0]})
+        self.assertEqual(["paper-1", "paper-2"], submitted)
+        self.assertEqual(3, len(writes))
+        self.assertEqual([], writes[0])
+        self.assertEqual(1, len(writes[1]))
+        self.assertIn(writes[1][0].paper_id, {"paper-1", "paper-2"})
+        self.assertEqual({"paper-1", "paper-2"}, {item.paper_id for item in writes[2]})
         self.assertEqual(2, summary["annotations_ai"])
         self.assertEqual(3, summary["concurrency"])
         build_annotator.assert_called_once_with("codex_cli", concurrency=3)
