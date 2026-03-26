@@ -10,10 +10,13 @@
 ## 运行
 
 ```powershell
-py -m paper_analysis.web.annotation_app
+Set-Location third_party/paper_analysis_dataset
+py -m paper_analysis_dataset.web.annotation_app
 ```
 
 默认地址：`http://127.0.0.1:8042`
+
+说明：该能力已迁移到子模块 `third_party/paper_analysis_dataset`。
 
 ## 标注约束
 

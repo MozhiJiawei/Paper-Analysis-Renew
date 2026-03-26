@@ -34,6 +34,13 @@ artifacts/quality/local-ci-latest.html
 - 需要通过 `subprocess.run(..., capture_output=True)` 抓取 CLI 输出的测试，优先依赖 CLI 自身的 UTF-8 标准输出配置，而不是把编码稳定性完全外包给调用方环境
 - 如果测试或脚本继续拉起 Python 子进程，仍应显式传递 `PYTHONUTF8=1` 与 `PYTHONIOENCODING=utf-8`，避免 Windows 管道输出退回本地代码页
 
+## 主仓与子仓边界
+
+- 主仓 `quality local-ci` 只覆盖主仓能力：`conference`、`arxiv`、`report` 及其非数据集相关检查
+- benchmark / annotation / 网页标注 / 评测数据 / 相关测试位于 `third_party/paper_analysis_dataset`
+- 主仓不会因为未检出 `third_party/paper_analysis_dataset` 而失败
+- 子仓测试需要在子仓上下文中单独执行
+
 ## arXiv 联网 e2e 约定
 
 `tests/e2e/` 中的 arXiv 黄金路径默认真实访问 arXiv 官方 API。这是仓库当前的明确要求，不是可选检查。
@@ -120,10 +127,10 @@ artifacts/quality/
 
 ## 测试分层
 
-- `tests/unit/`：共享领域模型、排序逻辑、报告写入等纯逻辑
-- `tests/unit/test_benchmark_builder.py`、`test_annotation_merge.py`、`test_codex_annotator_contract.py`、`test_annotation_repository.py`、`test_benchmark_dataset_contract.py`：覆盖单版本 benchmark 数据协议、双人标注合并、AI 预标 contract、仓储写入与数据门禁
+- `tests/unit/`：主仓共享领域模型、排序逻辑、报告写入等纯逻辑
 - `tests/integration/`：CLI 与 pipeline 的跨层协作
-- `tests/e2e/`：顶会链路、arXiv 联网订阅链路、Codex 自然语言黑盒链路，以及审核页消费真实产物的链路
+- `tests/e2e/`：主仓顶会链路、arXiv 联网订阅链路、Codex 自然语言黑盒链路，以及审核页消费真实产物的链路
+- `third_party/paper_analysis_dataset/tests/`：benchmark 数据协议、AI 预标、双人标注合并、网页标注、数据门禁等子仓专属测试
 
 ## 后续演进
 

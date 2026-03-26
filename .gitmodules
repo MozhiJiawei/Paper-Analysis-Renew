@@ -1,3 +1,6 @@
 [submodule "third_party/paperlists"]
 	path = third_party/paperlists
 	url = https://github.com/papercopilot/paperlists.git
+[submodule "third_party/paper_analysis_dataset"]
+	path = third_party/paper_analysis_dataset
+	url = https://github.com/MozhiJiawei/Paper-Analysis-DataSet.git

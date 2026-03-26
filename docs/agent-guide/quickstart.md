@@ -60,6 +60,11 @@ git submodule update --init --recursive
 py -m paper_analysis.cli.main conference report --venue iclr --year 2025 --paperlists-root tests/fixtures/paperlists_repo
 ```
 
+## 数据集子仓
+
+- `third_party/paper_analysis_dataset` 只在需要 benchmark、annotation、网页标注或评测数据时初始化
+- 主仓 `quality local-ci` 不依赖这个子仓
+
 ## 第一原则
 
 - 中文优先

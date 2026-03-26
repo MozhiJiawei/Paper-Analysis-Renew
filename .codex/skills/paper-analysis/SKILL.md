@@ -53,7 +53,6 @@ description: "Use when working in this repository on conference paper filtering,
 - 顶会链路优先复用 `conference` 命名空间，不新增 `recommend`
 - arXiv 链路优先复用 `arxiv` 命名空间，不在入口层做新的偏好产品面
 - 质量检查默认运行 `quality local-ci`
-- AI 预标默认链路使用 `codex_cli` 小模型，`doubao` 仅作为可切换备选后端
 - 文本产物与文档统一使用 UTF-8
 
 完整路由示例见：
@@ -69,6 +68,13 @@ description: "Use when working in this repository on conference paper filtering,
 - `conference filter` / `conference report` 支持通过 `paperlists` 子模块读取真实会议 JSON
 - 默认子模块路径：`third_party/paperlists`
 - 初始化命令：`git submodule update --init --recursive`
+
+数据集与标注边界：
+
+- benchmark / annotation / 网页标注 / 评测数据不再属于主仓稳定命令面
+- 这些能力位于子模块 `third_party/paper_analysis_dataset`
+- 主仓 `quality local-ci` 只检查主仓能力，不联跑子仓测试
+- 只有在需要评测数据集或标注流程时，才初始化 `third_party/paper_analysis_dataset`
 
 arXiv 输入模式：
 
