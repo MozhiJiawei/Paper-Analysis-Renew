@@ -331,9 +331,9 @@ origin: docs/brainstorms/2026-03-21-paper-filter-evaluation-taxonomy-requirement
 
 交付物建议：
 
-- `docs/benchmarks/paper-filter-label-spec.md`
-- `docs/benchmarks/paper-filter-annotation-guidelines.md`
-- `docs/benchmarks/paper-filter-ui-workflow.md`
+- `third_party/paper_analysis_dataset/docs/benchmarks/paper-filter-label-spec.md`
+- `third_party/paper_analysis_dataset/docs/benchmarks/paper-filter-annotation-guidelines.md`
+- `third_party/paper_analysis_dataset/docs/benchmarks/paper-filter-ui-workflow.md`
 - `data/benchmarks/paper-filter/shared/schema.json`
 
 #### Phase 2: 双人标注系统与校准集构筑
@@ -635,9 +635,9 @@ origin: docs/brainstorms/2026-03-21-paper-filter-evaluation-taxonomy-requirement
 
 建议至少新增或更新以下文档：
 
-- `docs/benchmarks/paper-filter-label-spec.md`
-- `docs/benchmarks/paper-filter-annotation-guidelines.md`
-- `docs/benchmarks/paper-filter-dataset-protocol.md`
+- `third_party/paper_analysis_dataset/docs/benchmarks/paper-filter-label-spec.md`
+- `third_party/paper_analysis_dataset/docs/benchmarks/paper-filter-annotation-guidelines.md`
+- `third_party/paper_analysis_dataset/docs/benchmarks/paper-filter-dataset-protocol.md`
 - [docs/engineering/testing-and-quality.md](D:/Git_Repo/Paper-Analysis-New/docs/engineering/testing-and-quality.md)
 
 本次不要求把标注工具同步到 Agent 命令面，因此默认不更新 skill、自然语言路由或 CLI `--help`，除非后续又决定开放内部构建命令。

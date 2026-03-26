@@ -64,6 +64,7 @@ py -m paper_analysis.cli.main conference report --venue iclr --year 2025 --paper
 
 - `third_party/paper_analysis_dataset` 只在需要 benchmark、annotation、网页标注或评测数据时初始化
 - 主仓 `quality local-ci` 不依赖这个子仓
+- benchmark 正式规范文档统一位于 `third_party/paper_analysis_dataset/docs/benchmarks/`
 
 ## 第一原则
 

@@ -53,3 +53,4 @@ py -m paper_analysis.cli.main <namespace> <action> [options]
 - “推荐 / 排序”不是独立命名空间
 - arXiv CLI 当前默认展示抓取结果，不在命令入口执行偏好筛选
 - benchmark / annotation / 网页标注能力已迁到 `third_party/paper_analysis_dataset` 子模块，不属于主仓 CLI 命令面
+- benchmark 正式规范文档位于 `third_party/paper_analysis_dataset/docs/benchmarks/`

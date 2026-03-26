@@ -40,6 +40,7 @@ artifacts/quality/local-ci-latest.html
 - benchmark / annotation / 网页标注 / 评测数据 / 相关测试位于 `third_party/paper_analysis_dataset`
 - 主仓不会因为未检出 `third_party/paper_analysis_dataset` 而失败
 - 子仓测试需要在子仓上下文中单独执行
+- benchmark 协议、标注规范与网页标注工作流文档统一位于 `third_party/paper_analysis_dataset/docs/benchmarks/`
 
 ## arXiv 联网 e2e 约定
 
