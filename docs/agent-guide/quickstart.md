@@ -21,6 +21,7 @@ py -m paper_analysis.cli.main conference report
 py -m paper_analysis.cli.main conference report --venue iclr --year 2025
 py -m paper_analysis.cli.main arxiv report
 py -m paper_analysis.cli.main quality local-ci
+py -m paper_analysis.api.evaluation_server --port 8765
 ```
 
 ## Doubao 私有配置
@@ -65,6 +66,7 @@ py -m paper_analysis.cli.main conference report --venue iclr --year 2025 --paper
 - `third_party/paper_analysis_dataset` 只在需要 benchmark、annotation、网页标注或评测数据时初始化
 - 主仓 `quality local-ci` 不依赖这个子仓
 - benchmark 正式规范文档统一位于 `third_party/paper_analysis_dataset/docs/benchmarks/`
+- 跨仓评测时，由主仓启动 `paper_analysis.api.evaluation_server`，子仓通过 `POST /v1/evaluation/annotate` 调用
 
 ## 第一原则
 

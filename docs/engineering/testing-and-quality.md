@@ -131,7 +131,18 @@ artifacts/quality/
 - `tests/unit/`：主仓共享领域模型、排序逻辑、报告写入等纯逻辑
 - `tests/integration/`：CLI 与 pipeline 的跨层协作
 - `tests/e2e/`：主仓顶会链路、arXiv 联网订阅链路、Codex 自然语言黑盒链路，以及审核页消费真实产物的链路
+- `tests/e2e/`：还包含评测 API 的真实 `POST /v1/evaluation/annotate` 黄金路径，以及子仓真实调用该 API 的跨仓链路
 - `third_party/paper_analysis_dataset/tests/`：benchmark 数据协议、AI 预标、双人标注合并、网页标注、数据门禁等子仓专属测试
+
+## 评测 API e2e 约定
+
+跨仓评测接口属于必须覆盖的真实 e2e 契约。
+
+- 主仓 e2e 必须真实启动 `paper_analysis.api.evaluation_server`
+- e2e 必须真实发送 `POST /v1/evaluation/annotate`
+- 至少断言一次 200 响应、schema 合法、标签协议合法
+- 响应中不得出现 `expected_label`、`ground_truth`、`split` 等评测数据泄露字段
+- 至少保留一条跨仓 e2e：由 `third_party/paper_analysis_dataset` 的评测 CLI 真实调用主仓接口并生成脱敏报告
 
 ## 后续演进
 

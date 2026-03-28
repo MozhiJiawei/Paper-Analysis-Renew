@@ -13,6 +13,9 @@ dependencies = [
     "volcengine-python-sdk>=1.0.129,<2",
 ]
 
+[project.scripts]
+paper-analysis-evaluation-api = "paper_analysis.api.evaluation_server:main"
+
 [tool.setuptools.packages.find]
 include = ["paper_analysis*"]
 

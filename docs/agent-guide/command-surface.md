@@ -54,3 +54,18 @@ py -m paper_analysis.cli.main <namespace> <action> [options]
 - arXiv CLI 当前默认展示抓取结果，不在命令入口执行偏好筛选
 - benchmark / annotation / 网页标注能力已迁到 `third_party/paper_analysis_dataset` 子模块，不属于主仓 CLI 命令面
 - benchmark 正式规范文档位于 `third_party/paper_analysis_dataset/docs/benchmarks/`
+
+## 评测 API
+
+以下能力不属于稳定 CLI 命令面，但属于跨仓评测契约的一部分：
+
+- 启动方式：`py -m paper_analysis.api.evaluation_server --port <port>`
+- 健康检查：`GET /healthz`
+- 评测接口：`POST /v1/evaluation/annotate`
+
+接口说明：
+
+- 请求体包含 `request_id` 与单篇论文 `paper`
+- 响应体包含 `request_id`、`prediction` 与 `model_info.algorithm_version`
+- 返回标签必须遵循数据集子仓的单标签协议
+- 响应中不得包含 `expected_label`、`ground_truth`、`split` 等评测泄露字段

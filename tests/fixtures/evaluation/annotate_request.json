@@ -1,0 +1,21 @@
+{
+  "request_id": "req-e2e-001",
+  "paper": {
+    "paper_id": "paper-e2e-001",
+    "title": "Speculative Decoding for Long-Context LLM Serving",
+    "abstract": "We introduce a speculative decoding method for large language model serving that improves acceptance rate and reduces latency.",
+    "abstract_zh": "我们提出一种面向大语言模型服务的 speculative decoding 方法，用于提升接受率并降低延迟。",
+    "authors": [
+      "Alice",
+      "Bob"
+    ],
+    "venue": "ICLR 2026",
+    "year": 2026,
+    "source": "conference",
+    "source_path": "fixtures/evaluation.json",
+    "keywords": [
+      "speculative decoding",
+      "serving"
+    ]
+  }
+}

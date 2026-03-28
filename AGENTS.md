@@ -32,6 +32,17 @@
 - `quality local-ci`
 - `report --source <conference|arxiv>`
 
+## 跨仓评测启动方式
+
+跨仓评测 API 不属于主仓稳定 CLI 命令面，但属于正式支持的评测契约。
+
+- 启动主仓评测服务：`py -m paper_analysis.api.evaluation_server --port 8765`
+- 健康检查：`GET /healthz`
+- 评测接口：`POST /v1/evaluation/annotate`
+- 子仓正式评测通过 `third_party/paper_analysis_dataset` 发起，并使用：
+  - `paper-analysis-dataset-evaluate --base-url http://127.0.0.1:8765 --limit 20`
+  - 或 `py -m paper_analysis_dataset.tools.evaluate_paper_filter_benchmark --base-url http://127.0.0.1:8765 --limit 20`
+
 ## 开发约束
 
 - 修改命令面时，必须同时更新：

@@ -15,6 +15,7 @@
 - 顶会命名空间：`conference`
 - arXiv 命名空间：`arxiv`
 - 质量门禁入口：`quality local-ci`
+- 评测 API 服务：`py -m paper_analysis.api.evaluation_server`
 - 顶会真实数据源：`third_party/paperlists` 子模块
 - CI HTML 审核页：`artifacts/quality/local-ci-latest.html`
 - HTML 模板渲染：`Jinja2`
@@ -51,6 +52,12 @@ py -m paper_analysis.cli.main arxiv report
 py -m paper_analysis.cli.main quality local-ci
 ```
 
+启动本地评测 API：
+
+```powershell
+py -m paper_analysis.api.evaluation_server --port 8765
+```
+
 执行完成后，可直接打开：
 
 ```text
@@ -76,3 +83,4 @@ artifacts/quality/local-ci-latest.html
 - UTF-8 编码一致
 - CLI 与文档对齐
 - 在不依赖第三方 Python 包的环境中也能跑通基础验证
+- 主仓与数据集子仓可仅通过 HTTP API 进行评测交互
