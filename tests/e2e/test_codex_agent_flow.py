@@ -15,7 +15,7 @@ ROOT_DIR = Path(__file__).resolve().parents[2]
 
 class CodexAgentE2ETests(CaseMetadataMixin, unittest.TestCase):
     def test_codex_discovers_repo_skill_and_completes_arxiv_report_from_natural_language(self) -> None:
-        """验证 Codex 能用自然语言发现 repo-local skill 并完成最简单的 arXiv 联网报告任务。"""
+        """【arxiv】Codex 可以根据自然语言正常完成 arXiv 报告任务。"""
 
         self.set_case_source_label("codex arxiv e2e")
         self.set_failure_check_description(

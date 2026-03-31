@@ -17,7 +17,7 @@ ROOT_DIR = Path(__file__).resolve().parents[2]
 
 class GoldenPathE2ETests(CaseMetadataMixin, unittest.TestCase):
     def test_conference_report_generates_stable_artifacts(self) -> None:
-        """验证 conference report 黄金链路能稳定生成结构化产物。"""
+        """【顶会】顶会论文筛选可以正常生成结果。"""
 
         self.set_case_source_label("conference e2e")
         self.set_failure_check_description("CLI 返回码非 0，或 summary/result/csv/stdout 任一关键产物缺失时判定失败。")
@@ -69,7 +69,7 @@ class GoldenPathE2ETests(CaseMetadataMixin, unittest.TestCase):
         self.record_step("检查 stdout.txt 含候选不足提示，确认文本产物内容稳定。")
 
     def test_arxiv_report_generates_stable_artifacts(self) -> None:
-        """验证 arXiv report 订阅 API 黄金链路能稳定生成结构化产物。"""
+        """【arxiv】arXiv API 可以正常获取论文。"""
 
         self.set_case_source_label("arxiv e2e")
         self.set_failure_check_description("CLI 返回码非 0，或联网 arXiv 报告缺少关键产物时判定失败。")
@@ -122,7 +122,7 @@ class GoldenPathE2ETests(CaseMetadataMixin, unittest.TestCase):
         self.record_step("确认 arXiv 联网结果至少包含一篇结构完整的论文。")
 
     def test_ci_html_report_renders_recommendations_from_real_e2e_artifacts(self) -> None:
-        """验证 CI HTML 能消费真实 e2e 产物并渲染推荐结果。"""
+        """【推荐】本地 CI 页面可以正常展示推荐相关 E2E 结果。"""
 
         self.set_case_source_label("ci html e2e")
         self.set_failure_check_description("若 HTML 未包含真实 e2e 推荐结果或关键区块缺失，则判定失败。")

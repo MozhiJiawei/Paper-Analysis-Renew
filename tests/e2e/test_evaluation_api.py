@@ -27,6 +27,7 @@ def _find_free_port() -> int:
 
 class EvaluationApiE2ETests(CaseMetadataMixin, unittest.TestCase):
     def test_evaluation_api_annotate_endpoint_golden_path(self) -> None:
+        """【推荐】主仓推荐算法评测接口可用。"""
         self.set_case_source_label("evaluation api e2e")
         self.set_failure_check_description("若真实 POST /v1/evaluation/annotate 未返回合法 schema，则判定失败。")
         port = _find_free_port()
@@ -64,14 +65,33 @@ class EvaluationApiE2ETests(CaseMetadataMixin, unittest.TestCase):
             self._stop_server(process)
 
     def test_dataset_evaluate_cli_hits_real_annotate_endpoint(self) -> None:
+        """【推荐】子仓评测流程可以正常调用主仓推荐接口并生成报告。"""
         self.set_case_source_label("dataset evaluation e2e")
         self.set_failure_check_description("若子仓评测 CLI 未真实命中 annotate API 或报告泄露测试集信息，则判定失败。")
         port = _find_free_port()
-        process = self._start_server(port, algorithm_version="cross-repo-e2e-v1")
-        output_dir = DATASET_ROOT / "artifacts" / "test-output" / "evaluation-e2e"
+        algorithm_version = "ab-scaffold-minimal-e2e-v1"
+        process = self._start_server(port, algorithm_version=algorithm_version)
+        output_dir = (
+            DATASET_ROOT
+            / "artifacts"
+            / "test-output"
+            / "evaluation-ab-e2e-minimal"
+        )
         if output_dir.exists():
             shutil.rmtree(output_dir)
         output_dir.mkdir(parents=True, exist_ok=True)
+        service_metadata_path = output_dir / "service-launch.json"
+        service_metadata_path.write_text(
+            json.dumps(
+                {
+                    "base_url": f"http://127.0.0.1:{port}",
+                    "algorithm_version": algorithm_version,
+                },
+                ensure_ascii=False,
+                indent=2,
+            ),
+            encoding="utf-8",
+        )
         env = os.environ.copy()
         env["PYTHONUTF8"] = "1"
         env["PYTHONIOENCODING"] = "utf-8"
@@ -110,6 +130,7 @@ class EvaluationApiE2ETests(CaseMetadataMixin, unittest.TestCase):
             self.add_case_artifact(str(stdout_txt))
             self.add_case_artifact(str(cli_stdout))
             self.add_case_artifact(str(cli_stderr))
+            self.add_case_artifact(str(service_metadata_path))
             self.assertTrue(report_json.exists())
             self.assertTrue(summary_md.exists())
             self.assertTrue(stdout_txt.exists())
@@ -120,6 +141,17 @@ class EvaluationApiE2ETests(CaseMetadataMixin, unittest.TestCase):
             self.assertEqual(3, payload["counts"]["evaluated_count"])
             self.assertEqual(0, payload["counts"]["request_error_count"])
             self.assertEqual(0, payload["counts"]["protocol_error_count"])
+            for metric_name in (
+                "macro_precision",
+                "macro_recall",
+                "macro_f1",
+                "micro_precision",
+                "micro_recall",
+                "micro_f1",
+            ):
+                self.assertIn(metric_name, payload["overall"])
+            self.assertIn("precision / recall / f1", summary)
+            self.assertIn(algorithm_version, service_metadata_path.read_text(encoding="utf-8"))
             self.assertNotIn("paper_id", serialized)
             self.assertNotIn("title", serialized.lower())
             self.assertNotIn("abstract", serialized.lower())

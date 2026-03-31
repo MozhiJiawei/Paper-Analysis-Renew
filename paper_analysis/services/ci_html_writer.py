@@ -172,9 +172,9 @@ def _sort_cases(cases: list[QualityCaseResult]) -> list[QualityCaseResult]:
     return sorted(
         cases,
         key=lambda item: (
-            STATUS_PRIORITY.get(item.status, 99),
-            item.source_label,
             item.title,
+            item.source_label,
+            STATUS_PRIORITY.get(item.status, 99),
         ),
     )
 

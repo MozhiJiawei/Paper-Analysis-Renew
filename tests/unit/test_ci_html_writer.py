@@ -244,6 +244,76 @@ class CIHtmlWriterTests(unittest.TestCase):
         self.assertIn("result.json 存在但无法解析", html)
         self.assertIn("失败", html)
 
+    def test_write_ci_html_report_sorts_e2e_cases_by_title(self) -> None:
+        """验证 E2E 用例按标题名称排序显示。"""
+
+        artifacts_dir = ROOT_DIR / "artifacts" / "test-output" / "ci-html-sort-by-title"
+        if artifacts_dir.exists():
+            shutil.rmtree(artifacts_dir)
+
+        self._write_case_artifacts(
+            artifacts_dir,
+            {
+                "e2e": [
+                    QualityCaseResult(
+                        stage_name="e2e",
+                        case_id="e2e.z",
+                        title="【推荐】主仓推荐算法评测接口可用",
+                        status="passed",
+                        description="desc",
+                        failure_check="check",
+                        process_log=["step"],
+                        result_log="ok",
+                        source_label="evaluation api e2e",
+                    ),
+                    QualityCaseResult(
+                        stage_name="e2e",
+                        case_id="e2e.a",
+                        title="【arxiv】arXiv API 可以正常获取论文",
+                        status="passed",
+                        description="desc",
+                        failure_check="check",
+                        process_log=["step"],
+                        result_log="ok",
+                        source_label="arxiv e2e",
+                    ),
+                    QualityCaseResult(
+                        stage_name="e2e",
+                        case_id="e2e.b",
+                        title="【顶会】顶会论文筛选可以正常生成结果",
+                        status="passed",
+                        description="desc",
+                        failure_check="check",
+                        process_log=["step"],
+                        result_log="ok",
+                        source_label="conference e2e",
+                    ),
+                ]
+            },
+        )
+
+        report_path = artifacts_dir / "quality" / "local-ci-latest.html"
+        write_ci_html_report(
+            report_path=report_path,
+            stage_results=[
+                QualityStageResult(
+                    stage_name="e2e",
+                    status="passed",
+                    summary="阶段通过",
+                    artifact_path="artifacts/quality/e2e-latest.txt",
+                    output="e2e output",
+                )
+            ],
+            artifacts_dir=artifacts_dir,
+        )
+
+        html = report_path.read_text(encoding="utf-8")
+        arxiv_index = html.index("【arxiv】arXiv API 可以正常获取论文")
+        recommend_index = html.index("【推荐】主仓推荐算法评测接口可用")
+        conference_index = html.index("【顶会】顶会论文筛选可以正常生成结果")
+        self.assertLess(arxiv_index, recommend_index)
+        self.assertLess(recommend_index, conference_index)
+
     def _write_e2e_payloads(self, artifacts_dir: Path) -> None:
         conference_dir = artifacts_dir / "e2e" / "conference" / "latest"
         arxiv_dir = artifacts_dir / "e2e" / "arxiv" / "latest"
