@@ -1,18 +1,18 @@
 ---
-title: feat: 用 main 与独立 worktree 模拟一次二分类 A/B 开发
+title: feat: 用两个独立 worktree 模拟一次二分类 A/B 开发
 type: feat
 status: active
 date: 2026-03-31
 origin: docs/brainstorms/2026-03-30-decoding-strategy-ab-requirements.md
 ---
 
-# feat: 用 main 与独立 worktree 模拟一次二分类 A/B 开发
+# feat: 用两个独立 worktree 模拟一次二分类 A/B 开发
 
 ## Overview
 
-本计划聚焦一次“先不搞复杂、先做 `positive/negative`”的真实 A/B 开发演练：以当前 `main` 承载 A 方案，再创建一个独立 Git worktree 承载 B 方案；双方都必须是彼此独立的真实算法方向，而不是“主线基线 + 空壳挑战者”或“同一路线的小参数微调”。两边围绕同一份二分类任务、同一份评测输入、同一套输出契约分别调优，完成后按统一标准择优录取。这个范围直接承接来源文档已经确认的结论：第一阶段只做大类二分类、先保 recall、多路径并行、默认使用 worktree 隔离 `(see origin: docs/brainstorms/2026-03-30-decoding-strategy-ab-requirements.md)`。
+本计划聚焦一次“先不搞复杂、先做 `positive/negative`”的真实 A/B 开发演练：从同一共享底座提交点创建两个彼此独立的 Git worktree，分别承载 A 方案与 B 方案；双方都必须是彼此独立的真实算法方向，而不是“主线基线 + 空壳挑战者”或“同一路线的小参数微调”。两边围绕同一份二分类任务、同一份评测输入、同一套输出契约分别调优，完成后按统一标准择优录取。这个范围直接承接来源文档已经确认的结论：第一阶段只做大类二分类、先保 recall、多路径并行、默认使用 worktree 隔离 `(see origin: docs/brainstorms/2026-03-30-decoding-strategy-ab-requirements.md)`。
 
-与已经完成的“主线 A/B scaffold 落地”不同，这份计划不再讨论如何补脚手架，而是定义如何基于现有脚手架做第一次最小真实对打：`main` 与独立 worktree 各自承载一条真实算法路线；两边都只输出 `positive/negative`，不把六个偏好子类作为本轮胜负依据。
+与已经完成的“主线 A/B scaffold 落地”不同，这份计划不再讨论如何补脚手架，而是定义如何基于现有脚手架做第一次最小真实对打：两个独立 worktree 各自承载一条真实算法路线；`main` 只负责冻结共享底座与承接最终胜方回收。两边都只输出 `positive/negative`，不把六个偏好子类作为本轮胜负依据。
 
 ## Problem Statement / Motivation
 
@@ -23,10 +23,10 @@ origin: docs/brainstorms/2026-03-30-decoding-strategy-ab-requirements.md
 - 主线已经存在 A/B runner、registry 和四类 stub 路线，可支持结构化结果落盘 [paper_analysis/evaluation/ab_runner.py](D:/Git_Repo/Paper-Analysis-New/paper_analysis/evaluation/ab_runner.py) [paper_analysis/evaluation/route_registry.py](D:/Git_Repo/Paper-Analysis-New/paper_analysis/evaluation/route_registry.py)。
 - 主仓与子仓之间已经保留最小真实评测 e2e，且报告里能看到 `precision / recall / f1` 与 `algorithm_version` [tests/e2e/test_evaluation_api.py](D:/Git_Repo/Paper-Analysis-New/tests/e2e/test_evaluation_api.py)。
 
-但“如何用 `main + 独立 worktree` 做第一次真实二分类 A/B 演练”还没有被写成一份清晰方案：
+但“如何用两个独立 worktree 做第一次真实二分类 A/B 演练”还没有被写成一份清晰方案：
 
 - 哪些文件属于共享底座，双方都不能随意改。
-- `main` 路线和 worktree 路线各自允许在哪些目录调优。
+- A 路线和 B 路线各自允许在哪些目录调优，以及哪些改动必须留在各自 worktree 内。
 - 同一轮对比的输入集、算法版本标识、结果目录和胜出规则是什么。
 - 当第一次只做 `positive/negative` 时，如何避免过早把实验目标收缩到子类标签，从而偏离来源文档的阶段目标 `(see origin: docs/brainstorms/2026-03-30-decoding-strategy-ab-requirements.md)`。
 
@@ -39,7 +39,7 @@ origin: docs/brainstorms/2026-03-30-decoding-strategy-ab-requirements.md
 
 ## Proposed Solution
 
-采用“一份共享底座 + 两个隔离工作区 + 一轮统一离线评测”的最小演练方案。
+采用“一份共享底座 + 两个隔离 worktree + 一轮统一离线评测”的最小演练方案。
 
 ### 1. 固定本轮只比较大类二分类
 
@@ -51,12 +51,13 @@ origin: docs/brainstorms/2026-03-30-decoding-strategy-ab-requirements.md
 
 这与来源文档的阶段边界一致：先把 `positive/negative` 做稳，再决定是否进入子类细分 `(see origin: docs/brainstorms/2026-03-30-decoding-strategy-ab-requirements.md)`。
 
-### 2. 用 `main` 承载 A 方案，用独立 worktree 承载 B 方案
+### 2. 用两个独立 worktree 承载 A/B 方案，`main` 只承载共享底座
 
 本轮默认角色如下：
 
-- A 方案：`main` 上的一条真实算法路线
-- B 方案：从同一提交点拉出的独立 worktree 上的另一条真实算法路线
+- `main`：冻结共享底座，不直接承载参赛路线实现
+- A 方案：从共享底座提交点拉出的独立 worktree 上的一条真实算法路线
+- B 方案：从同一提交点拉出的另一独立 worktree 上的另一条真实算法路线
 
 两边都必须复用同一套共享底座：
 
@@ -69,7 +70,7 @@ origin: docs/brainstorms/2026-03-30-decoding-strategy-ab-requirements.md
 
 两边允许独立修改的范围应尽量收缩到：
 
-- 自己的 route 实现文件
+- 自己的 worktree 内 route 实现文件
 - 与该 route 绑定的轻量配置
 - 必要的 prompt / 阈值 / 特征参数
 
@@ -87,9 +88,9 @@ origin: docs/brainstorms/2026-03-30-decoding-strategy-ab-requirements.md
 
 建议首轮只安排：
 
-- `main`：一条真实方向的 A 路线
+- `worktree-a`：一条真实方向的 A 路线
   - 建议采用 `embedding / 相似度召回 + 阈值二分类`
-- `worktree`：另一条明确不同范式的 B 路线
+- `worktree-b`：另一条明确不同范式的 B 路线
   - 建议采用 `规则预过滤 + LLM 二阶段裁决`
 
 首轮的“不要太复杂”，指的是只比大类 `positive/negative`，而不是把 A、B 降级成不完整方案。也就是说，复杂度收缩的是任务口径，不是路线真实性。
@@ -171,7 +172,7 @@ origin: docs/brainstorms/2026-03-30-decoding-strategy-ab-requirements.md
 ## System-Wide Impact
 
 - **Interaction graph**:
-  `fixed benchmark -> main route / worktree route -> ab_runner -> metrics -> leaderboard -> winner decision`
+  `fixed benchmark -> worktree-a route / worktree-b route -> ab_runner -> metrics -> leaderboard -> winner decision`
 - **Error propagation**:
   单条路线失败应落为 `failed`，不能阻断另一条路线出结果。
 - **State lifecycle risks**:
@@ -198,22 +199,24 @@ origin: docs/brainstorms/2026-03-30-decoding-strategy-ab-requirements.md
 - `docs/engineering/ab-worktree-workflow.md` 更新本轮规则
 - `docs/plans/2026-03-31-001-feat-main-worktree-binary-ab-simulation-plan.md`
 
-### Phase 2: 在 `main` 固化 A 方案真实路线
+### Phase 2: 创建 `worktree-a` 并实现 A 方案真实路线
 
-- 在 `main` 上实现 `embedding_similarity_binary`
+- 从共享底座提交点创建 `worktree-a`
+- 在 `worktree-a` 中实现 `embedding_similarity_binary`
 - 从 `paper_analysis` 现有来源链路或 arXiv API 拉取无标记论文，作为 A 路线开发观察数据
-- 保证该路线在主线可以稳定跑完，并产出真实预测与 metrics
+- 保证该路线在自己的 worktree 中可以稳定跑完，并产出真实预测与 metrics
 - 为 A 路线写清算法思路、输入、阈值、已知短板和 `algorithm_version`
 
 交付物：
 
-- 一个可运行的 `main` A 路线实现
+- 一个隔离的 `worktree-a`
+- 一个可运行的 A 路线实现
 - 对应的最小 unit / integration 验证
 
-### Phase 3: 创建独立 worktree 并实现 B 方案真实路线
+### Phase 3: 创建 `worktree-b` 并实现 B 方案真实路线
 
-- 从与 `main` 同一提交点创建独立 worktree
-- 在 worktree 中实现 `rule_filtered_llm_binary`
+- 从与 `worktree-a` 相同的共享底座提交点创建 `worktree-b`
+- 在 `worktree-b` 中实现 `rule_filtered_llm_binary`
 - 从 `paper_analysis` 现有来源链路或 arXiv API 拉取无标记论文，作为 B 路线规则观察与 prompt 调优数据
 - 先定义规则预过滤层，再定义 LLM 裁决层
 - 只在 B 路线独占目录或 route 文件中调优
@@ -223,17 +226,18 @@ origin: docs/brainstorms/2026-03-30-decoding-strategy-ab-requirements.md
 
 交付物：
 
-- 一个隔离的 worktree
+- 一个隔离的 `worktree-b`
 - 一个 ready 状态的 B 路线实现
 - B 路线自有调优记录
 
 ### Phase 4: 统一跑分并择优录取
 
-- 在同一输入集上分别跑 `main` 与 worktree 路线
+- 在同一输入集上分别跑 `worktree-a` 与 `worktree-b` 路线
 - 汇总 precision / recall / f1 与失败情况
 - 生成对比结论
 - 选出本轮推荐默认路线
 - 决定败方是淘汰、冻结还是继续保留观察
+- 若需要回收胜方，只把胜方路线实现、必要配置与最小测试有选择地合回 `main`
 
 交付物：
 
@@ -245,13 +249,13 @@ origin: docs/brainstorms/2026-03-30-decoding-strategy-ab-requirements.md
 
 ### User Flow Overview
 
-1. 开发者在 `main` 完成 A 路线真实实现。
-2. 开发者从同一提交点创建独立 worktree。
-3. `main` 与 worktree 各自只在允许范围内完成独立方向调优。
+1. 开发者先在 `main` 冻结共享底座与实验契约。
+2. 开发者从同一提交点创建 `worktree-a` 与 `worktree-b`。
+3. 两个 worktree 各自只在允许范围内完成独立方向调优。
 4. 双方使用同一 benchmark 输入集运行 A/B。
 5. runner 生成统一产物与 leaderboard。
 6. 团队按 recall-first 规则做录取决定。
-7. 若胜方来自 worktree，再把胜方实现有选择地回收进主线。
+7. 若需要推广胜方，再把胜方实现有选择地回收进主线。
 
 其中第 4 步之前，应先完成一轮开发数据阶段：
 
@@ -266,7 +270,7 @@ origin: docs/brainstorms/2026-03-30-decoding-strategy-ab-requirements.md
   - **Default**: A 采用 `embedding / 相似度召回 + 阈值二分类`，B 采用 `规则预过滤 + LLM 裁决`。
 
 - **Category**: Challenger Scope
-  - **Gap Description**: worktree 首轮只能落一条真实 B 路线，不能把多个方向混成一团。
+  - **Gap Description**: 每个 worktree 首轮都只能落一条真实路线，不能把多个方向混成一团。
   - **Impact**: 若同时混入 LLM、embedding、两阶段多个思路，就失去路线独立性与可解释性。
   - **Default**: B 路线固定为“两阶段但单主思路”：规则负责高召回候选过滤，LLM 只负责候选裁决。
 
@@ -290,7 +294,7 @@ origin: docs/brainstorms/2026-03-30-decoding-strategy-ab-requirements.md
 本计划先按以下默认假设继续，不阻塞规划：
 
 1. **Critical**: A、B 都必须是独立方向的真实算法方案，不能出现 stub 对真算法、或同一路线小改参数的伪 A/B。
-2. **Critical**: `main` 与 worktree 都必须复用同一 runner 和同一 metrics 口径。
+2. **Critical**: `worktree-a` 与 `worktree-b` 都必须复用同一 runner 和同一 metrics 口径。
 3. **Important**: B 路线必须通过规则层缩小 LLM 处理范围，不直接对全量数据逐条调用 LLM。
 4. **Critical**: 人工标注数据只允许作为测试验收依据，不能作为开发集、调参集或 prompt 迭代集使用。
 5. **Important**: 录取标准严格遵循 recall-first，不因某条路线 precision 更高就忽略召回损失。
@@ -298,7 +302,7 @@ origin: docs/brainstorms/2026-03-30-decoding-strategy-ab-requirements.md
 ## Acceptance Criteria
 
 - [ ] 首轮 A/B 只比较 `positive/negative`，不把子类标签作为胜负主指标。
-- [ ] `main` 与独立 worktree 都有各自可运行的 ready 路线。
+- [ ] `worktree-a` 与 `worktree-b` 都有各自可运行的 ready 路线。
 - [ ] A、B 两条路线在方法上属于彼此独立的真实方向，而不是同一方法的轻微改写。
 - [ ] A 路线明确为 `embedding_similarity_binary`，B 路线明确为 `rule_filtered_llm_binary`。
 - [ ] B 路线先经过规则预过滤，再把候选集交给 LLM 裁决，而不是全量数据直送 LLM。
@@ -312,7 +316,7 @@ origin: docs/brainstorms/2026-03-30-decoding-strategy-ab-requirements.md
 
 ## Success Metrics
 
-- 团队可以在不改共享底座的前提下，完成一次 `embedding_similarity_binary` vs `rule_filtered_llm_binary` 的真实二分类对打。
+- 团队可以在不改共享底座的前提下，完成一次 `worktree-a` 的 `embedding_similarity_binary` vs `worktree-b` 的 `rule_filtered_llm_binary` 真实二分类对打。
 - 首轮就能用统一报告回答“哪条真实路线 recall 更稳、谁综合更优、谁更适合作为下一阶段底座”。
 - 最终验收结果不依赖人工标注数据泄漏到开发阶段，仍具备独立比较价值。
 - 胜方被回收进主线时，不需要重写 runner、协议和 artifact schema。
@@ -323,7 +327,7 @@ origin: docs/brainstorms/2026-03-30-decoding-strategy-ab-requirements.md
 
 - 依赖现有 A/B scaffold 代码继续作为共享底座可用 [paper_analysis/evaluation/ab_runner.py](D:/Git_Repo/Paper-Analysis-New/paper_analysis/evaluation/ab_runner.py)。
 - 依赖现有跨仓评测链路继续可运行 [tests/e2e/test_evaluation_api.py](D:/Git_Repo/Paper-Analysis-New/tests/e2e/test_evaluation_api.py)。
-- 依赖团队遵守 worktree 边界，不把实验改动直接混入主线共享文件 `(see origin: docs/brainstorms/2026-03-30-decoding-strategy-ab-requirements.md)`。
+- 依赖团队遵守 worktree 边界，不把实验改动直接混入主线共享文件，并确保两个 worktree 都从同一共享底座提交点拉出 `(see origin: docs/brainstorms/2026-03-30-decoding-strategy-ab-requirements.md)`。
 
 ### Risks
 
