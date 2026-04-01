@@ -180,6 +180,26 @@ class EvaluationRequest:
 
 
 @dataclass(slots=True)
+class EvaluationBatchRequest:
+    requests: list[EvaluationRequest]
+
+    def __post_init__(self) -> None:
+        if not self.requests:
+            raise EvaluationProtocolError("requests 必须是非空数组")
+
+    @classmethod
+    def from_dict(cls, payload: object) -> EvaluationBatchRequest:
+        if not isinstance(payload, dict):
+            raise EvaluationProtocolError("请求体必须是 JSON 对象")
+        raw_requests = payload.get("requests")
+        if not isinstance(raw_requests, list):
+            raise EvaluationProtocolError("requests 必须是数组")
+        return cls(
+            requests=[EvaluationRequest.from_dict(item) for item in raw_requests],
+        )
+
+
+@dataclass(slots=True)
 class EvaluationPrediction:
     primary_research_object: str
     preference_labels: list[str]
@@ -235,4 +255,16 @@ class EvaluationResponse:
             "prediction": self.prediction.to_dict(),
             "model_info": {"algorithm_version": self.algorithm_version},
         }
+
+
+@dataclass(slots=True)
+class EvaluationBatchResponse:
+    responses: list[EvaluationResponse]
+
+    def __post_init__(self) -> None:
+        if not self.responses:
+            raise EvaluationProtocolError("responses 必须是非空数组")
+
+    def to_dict(self) -> dict[str, object]:
+        return {"responses": [item.to_dict() for item in self.responses]}
 

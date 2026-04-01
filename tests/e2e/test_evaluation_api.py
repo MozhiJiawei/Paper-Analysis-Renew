@@ -55,10 +55,12 @@ class EvaluationApiE2ETests(CaseMetadataMixin, unittest.TestCase):
             self.add_case_artifact(str(request_path))
             self.add_case_artifact(str(response_path))
             self.record_step("检查响应 schema、单标签协议以及脱敏边界。")
-            self.assertEqual("req-e2e-001", response["request_id"])
-            self.assertEqual("e2e-test-v1", response["model_info"]["algorithm_version"])
-            self.assertEqual("positive", response["prediction"]["negative_tier"])
-            self.assertEqual(1, len(response["prediction"]["preference_labels"]))
+            self.assertEqual(1, len(response["responses"]))
+            item = response["responses"][0]
+            self.assertEqual("req-e2e-001", item["request_id"])
+            self.assertEqual("e2e-test-v1", item["model_info"]["algorithm_version"])
+            self.assertEqual("positive", item["prediction"]["negative_tier"])
+            self.assertEqual(1, len(item["prediction"]["preference_labels"]))
             self.assertNotIn("expected_label", json.dumps(response, ensure_ascii=False))
             self.assertNotIn("split", json.dumps(response, ensure_ascii=False))
         finally:
@@ -104,7 +106,7 @@ class EvaluationApiE2ETests(CaseMetadataMixin, unittest.TestCase):
                     "--base-url",
                     f"http://127.0.0.1:{port}",
                     "--limit",
-                    "3",
+                    "55",
                     "--output-dir",
                     str(output_dir),
                 ],
@@ -138,7 +140,7 @@ class EvaluationApiE2ETests(CaseMetadataMixin, unittest.TestCase):
             summary = summary_md.read_text(encoding="utf-8")
             serialized = json.dumps(payload, ensure_ascii=False) + "\n" + summary
             self.record_step("检查报告产物只包含聚合指标，不泄露 paper_id、标题、摘要或 source_path。")
-            self.assertEqual(3, payload["counts"]["evaluated_count"])
+            self.assertEqual(55, payload["counts"]["evaluated_count"])
             self.assertEqual(0, payload["counts"]["request_error_count"])
             self.assertEqual(0, payload["counts"]["protocol_error_count"])
             for metric_name in (

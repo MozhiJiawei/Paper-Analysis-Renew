@@ -1,7 +1,7 @@
 ---
 title: feat: 用两个独立 worktree 模拟一次二分类 A/B 开发
 type: feat
-status: active
+status: completed
 date: 2026-03-31
 origin: docs/brainstorms/2026-03-30-decoding-strategy-ab-requirements.md
 ---

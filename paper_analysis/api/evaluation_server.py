@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from argparse import ArgumentParser
+from concurrent.futures import ThreadPoolExecutor
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
@@ -8,8 +9,9 @@ from typing import Any
 
 from paper_analysis.api.evaluation_predictor import EvaluationPredictor
 from paper_analysis.api.evaluation_protocol import (
+    EvaluationBatchRequest,
+    EvaluationBatchResponse,
     EvaluationProtocolError,
-    EvaluationRequest,
     EvaluationResponse,
 )
 from paper_analysis.shared.encoding import configure_utf8_stdio
@@ -38,23 +40,19 @@ class EvaluationRequestHandler(BaseHTTPRequestHandler):
             return
         try:
             payload = self._read_json_body()
-            request = EvaluationRequest.from_dict(payload)
-            prediction = self.predictor.predict(request.paper)
-            response = EvaluationResponse(
-                request_id=request.request_id,
-                prediction=prediction,
-                algorithm_version=self.predictor.algorithm_version,
-            )
-        except EvaluationProtocolError as exc:
-            self._write_json(
-                HTTPStatus.BAD_REQUEST,
-                {"error": {"code": "invalid_request", "message": str(exc)}},
-            )
-            return
+            batch_request = EvaluationBatchRequest.from_dict(payload)
+            responses = self._predict_batch(batch_request)
+            response = EvaluationBatchResponse(responses=responses)
         except json.JSONDecodeError:
             self._write_json(
                 HTTPStatus.BAD_REQUEST,
                 {"error": {"code": "invalid_json", "message": "请求体不是合法 JSON"}},
+            )
+            return
+        except EvaluationProtocolError as exc:
+            self._write_json(
+                HTTPStatus.BAD_REQUEST,
+                {"error": {"code": "invalid_request", "message": str(exc)}},
             )
             return
         self._write_json(HTTPStatus.OK, response.to_dict())
@@ -68,6 +66,24 @@ class EvaluationRequestHandler(BaseHTTPRequestHandler):
             raise EvaluationProtocolError("请求体不能为空")
         raw_body = self.rfile.read(content_length)
         return json.loads(raw_body.decode("utf-8"))
+
+    def _predict_batch(
+        self,
+        batch_request: EvaluationBatchRequest,
+    ) -> list[EvaluationResponse]:
+        with ThreadPoolExecutor(max_workers=len(batch_request.requests)) as executor:
+            futures = [
+                executor.submit(self.predictor.predict, request.paper)
+                for request in batch_request.requests
+            ]
+        return [
+            EvaluationResponse(
+                request_id=request.request_id,
+                prediction=future.result(),
+                algorithm_version=self.predictor.algorithm_version,
+            )
+            for request, future in zip(batch_request.requests, futures, strict=True)
+        ]
 
     def _write_json(self, status: HTTPStatus, payload: dict[str, object]) -> None:
         body = json.dumps(payload, ensure_ascii=False, indent=2).encode("utf-8")

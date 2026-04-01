@@ -18,6 +18,7 @@ from paper_analysis.shared.paths import ARTIFACTS_DIR, ROOT_DIR
 
 DEFAULT_BASE_URL = "https://ark.cn-beijing.volces.com/api/v3"
 DEFAULT_MODEL = "doubao-seed-2-0-pro-260215"
+DEFAULT_EMBEDDING_BATCH_SIZE = 128
 DEFAULT_CONFIG_DIR_NAME = ".paper-analysis"
 DEFAULT_CONFIG_FILE_NAME = "doubao.yaml"
 TEMPLATE_CONFIG_PATH = ROOT_DIR / "paper_analysis" / "config" / "doubao.template.yaml"
@@ -32,6 +33,7 @@ class DoubaoConfig:
     api_key: str | None = None
     base_url: str = DEFAULT_BASE_URL
     model: str = DEFAULT_MODEL
+    embedding_model: str | None = None
 
 
 @dataclass(slots=True)
@@ -56,6 +58,21 @@ class DoubaoResponse:
 
 
 @dataclass(slots=True)
+class DoubaoEmbeddingResponse:
+    success: bool
+    vectors: list[list[float]]
+    model: str
+    error: str | None = None
+    usage: DoubaoUsage | None = None
+
+    def to_dict(self) -> dict[str, Any]:
+        payload = asdict(self)
+        if self.usage is None:
+            payload["usage"] = None
+        return payload
+
+
+@dataclass(slots=True)
 class DoubaoClient:
     runner: Runner | None = None
     api_key: str | None = None
@@ -64,6 +81,7 @@ class DoubaoClient:
     config_path: Path | None = None
     audit_log_path: Path | None = None
     concurrency: int = 1
+    embedding_batch_size: int = DEFAULT_EMBEDDING_BATCH_SIZE
     _thread_local: threading.local = field(init=False, repr=False)
     _config: DoubaoConfig = field(init=False, repr=False)
     _executor: ThreadPoolExecutor | None = field(init=False, default=None, repr=False)
@@ -71,11 +89,13 @@ class DoubaoClient:
 
     def __post_init__(self) -> None:
         self.concurrency = _validate_concurrency(self.concurrency)
+        self.embedding_batch_size = _validate_embedding_batch_size(self.embedding_batch_size)
         config_payload = self._load_config()
         self._config = DoubaoConfig(
             api_key=self.api_key or os.getenv("ARK_API_KEY") or config_payload.get("api_key"),
             base_url=self.base_url or config_payload.get("base_url", DEFAULT_BASE_URL),
             model=self.model or config_payload.get("model", DEFAULT_MODEL),
+            embedding_model=config_payload.get("embedding_model"),
         )
         self._thread_local = threading.local()
         self._executor_lock = threading.Lock()
@@ -92,6 +112,10 @@ class DoubaoClient:
     def resolved_model(self) -> str:
         return self._config.model
 
+    @property
+    def resolved_embedding_model(self) -> str | None:
+        return self._config.embedding_model
+
     def submit(
         self,
         messages: list[dict[str, Any]],
@@ -99,6 +123,119 @@ class DoubaoClient:
         stream: bool = False,
     ) -> Future[dict[str, Any]]:
         return self._get_executor().submit(self._run_chat_sync, messages, stream=stream)
+
+    def embed_texts(
+        self,
+        texts: list[str],
+        *,
+        model: str | None = None,
+    ) -> DoubaoEmbeddingResponse:
+        if not texts:
+            return DoubaoEmbeddingResponse(success=True, vectors=[], model=model or "")
+        resolved_model = model or self.resolved_embedding_model
+        if not resolved_model:
+            raise ValueError(
+                "Doubao embedding 模型未设置，请在 ~/.paper-analysis/doubao.yaml 的 "
+                "`doubao.embedding_model` 中填写可调用的 embedding endpoint / model。"
+            )
+        if not self.resolved_api_key:
+            raise ValueError(
+                "Doubao API 密钥未设置，请检查 ARK_API_KEY，或在用户私有配置中创建 "
+                f"{_default_config_path()}（可参考模板 {TEMPLATE_CONFIG_PATH}）。"
+            )
+        started_at = time.perf_counter()
+        request_id = str(uuid.uuid4())
+        try:
+            normalized = self._embed_texts_via_standard_api(
+                texts=texts,
+                model=resolved_model,
+            )
+        except Exception as exc:
+            if _should_use_multimodal_embedding_api(resolved_model, exc):
+                normalized = self._embed_texts_via_multimodal(
+                    texts=texts,
+                    model=resolved_model,
+                )
+            else:
+                normalized = DoubaoEmbeddingResponse(
+                    success=False,
+                    vectors=[],
+                    model=resolved_model,
+                    error=str(exc),
+                )
+        self._write_audit_log(
+            request_id=request_id,
+            messages=[{"role": "embedding", "content": text} for text in texts],
+            response=normalized.to_dict(),
+            stream=False,
+            duration_ms=_duration_ms(started_at),
+            source="ark_sdk",
+        )
+        return normalized
+
+    def _embed_texts_via_standard_api(
+        self,
+        *,
+        texts: list[str],
+        model: str,
+    ) -> DoubaoEmbeddingResponse:
+        vectors: list[list[float]] = []
+        usage = DoubaoUsage()
+        for batch in _chunk_list(texts, self.embedding_batch_size):
+            response = self._get_client().embeddings.create(model=model, input=batch)
+            normalized = self._normalize_embedding_response(response=response, model=model)
+            vectors.extend(normalized.vectors)
+            usage = _merge_usage(usage, normalized.usage)
+        return DoubaoEmbeddingResponse(
+            success=True,
+            vectors=vectors,
+            model=model,
+            usage=usage,
+        )
+
+    def _embed_texts_via_multimodal(
+        self,
+        *,
+        texts: list[str],
+        model: str,
+    ) -> DoubaoEmbeddingResponse:
+        vectors: list[list[float]] = []
+        usage: DoubaoUsage | None = None
+        try:
+            for text in texts:
+                response = self._get_client().multimodal_embeddings.create(
+                    model=model,
+                    input=[{"type": "text", "text": text}],
+                )
+                vectors.append(_extract_multimodal_embedding_vector(response))
+                usage = _extract_usage(response) or usage
+            return DoubaoEmbeddingResponse(
+                success=True,
+                vectors=vectors,
+                model=model,
+                usage=usage,
+            )
+        except Exception as exc:
+            return DoubaoEmbeddingResponse(
+                success=False,
+                vectors=[],
+                model=model,
+                error=str(exc),
+            )
+
+    def _normalize_embedding_response(
+        self,
+        *,
+        response: Any,
+        model: str,
+    ) -> DoubaoEmbeddingResponse:
+        data = getattr(response, "data", None) or []
+        return DoubaoEmbeddingResponse(
+            success=True,
+            vectors=[list(item.embedding or []) for item in data],
+            model=model,
+            usage=_extract_usage(response),
+        )
 
     def _run_chat_sync(self, messages: list[dict[str, Any]], *, stream: bool = False) -> dict[str, Any]:
         started_at = time.perf_counter()
@@ -259,11 +396,52 @@ def _extract_usage(response: Any) -> DoubaoUsage | None:
     usage = getattr(response, "usage", None)
     if usage is None:
         return None
+    if isinstance(usage, dict):
+        return DoubaoUsage(
+            prompt_tokens=usage.get("prompt_tokens"),
+            completion_tokens=usage.get("completion_tokens"),
+            total_tokens=usage.get("total_tokens"),
+        )
     return DoubaoUsage(
         prompt_tokens=getattr(usage, "prompt_tokens", None),
         completion_tokens=getattr(usage, "completion_tokens", None),
         total_tokens=getattr(usage, "total_tokens", None),
     )
+
+
+def _extract_multimodal_embedding_vector(response: Any) -> list[float]:
+    data = getattr(response, "data", None)
+    embedding = getattr(data, "embedding", None)
+    if embedding is None:
+        raise ValueError("多模态 embedding 响应中缺少 embedding 字段。")
+    return list(embedding)
+
+
+def _should_use_multimodal_embedding_api(model: str, exc: Exception) -> bool:
+    message = str(exc).lower()
+    return "embedding-vision" in model.lower() and "does not support this api" in message
+
+
+def _merge_usage(base: DoubaoUsage | None, extra: DoubaoUsage | None) -> DoubaoUsage | None:
+    if base is None:
+        return extra
+    if extra is None:
+        return base
+    return DoubaoUsage(
+        prompt_tokens=_sum_optional(base.prompt_tokens, extra.prompt_tokens),
+        completion_tokens=_sum_optional(base.completion_tokens, extra.completion_tokens),
+        total_tokens=_sum_optional(base.total_tokens, extra.total_tokens),
+    )
+
+
+def _sum_optional(left: int | None, right: int | None) -> int | None:
+    if left is None and right is None:
+        return None
+    return (left or 0) + (right or 0)
+
+
+def _chunk_list(items: list[Any], batch_size: int) -> list[list[Any]]:
+    return [items[index : index + batch_size] for index in range(0, len(items), batch_size)]
 
 
 def _duration_ms(started_at: float) -> int:
@@ -293,3 +471,9 @@ def _validate_concurrency(value: int) -> int:
     if 1 <= value <= 10:
         return value
     raise ValueError(f"Doubao 并发非法：{value}；允许范围：1~10")
+
+
+def _validate_embedding_batch_size(value: int) -> int:
+    if 1 <= value <= 256:
+        return value
+    raise ValueError(f"Doubao embedding batch 非法：{value}；允许范围：1~256")
