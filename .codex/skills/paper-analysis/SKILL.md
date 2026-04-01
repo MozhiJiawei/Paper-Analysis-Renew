@@ -76,6 +76,7 @@ description: "Use when working in this repository on conference paper filtering,
 - 主仓 `quality local-ci` 只检查主仓能力，不联跑子仓测试
 - 只有在需要评测数据集或标注流程时，才初始化 `third_party/paper_analysis_dataset`
 - 如需让子仓通过 API 调主仓推荐算法，使用 `py -m paper_analysis.api.evaluation_server`
+- 当前评测 API 采用批量协议：请求体为 `requests` 数组，响应体为 `responses` 数组；子仓评测 CLI 默认每批发送 50 条
 
 arXiv 输入模式：
 

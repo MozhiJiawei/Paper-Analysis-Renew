@@ -65,7 +65,8 @@ py -m paper_analysis.cli.main <namespace> <action> [options]
 
 接口说明：
 
-- 请求体包含 `request_id` 与单篇论文 `paper`
-- 响应体包含 `request_id`、`prediction` 与 `model_info.algorithm_version`
+- 请求体包含 `requests` 数组；数组元素包含 `request_id` 与单篇论文 `paper`
+- 响应体包含 `responses` 数组；数组元素包含 `request_id`、`prediction` 与 `model_info.algorithm_version`
+- 主仓会在一个批次请求内并行处理全部论文，等整批完成后再一次性返回
 - 返回标签必须遵循数据集子仓的单标签协议
 - 响应中不得包含 `expected_label`、`ground_truth`、`split` 等评测泄露字段

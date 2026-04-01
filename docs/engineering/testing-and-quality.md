@@ -152,7 +152,7 @@ artifacts/quality/
 - `tests/unit/`：主仓共享领域模型、排序逻辑、报告写入等纯逻辑
 - `tests/integration/`：CLI 与 pipeline 的跨层协作
 - `tests/e2e/`：主仓顶会链路、arXiv 联网订阅链路、Codex 自然语言黑盒链路，以及审核页消费真实产物的链路
-- `tests/e2e/`：还包含评测 API 的真实 `POST /v1/evaluation/annotate` 黄金路径，以及子仓真实调用该 API 的跨仓链路
+- `tests/e2e/`：还包含评测 API 的真实批量 `POST /v1/evaluation/annotate` 黄金路径，以及子仓真实调用该 API 的跨仓链路
 - `third_party/paper_analysis_dataset/tests/`：benchmark 数据协议、AI 预标、双人标注合并、网页标注、数据门禁等子仓专属测试
 
 ## 评测 API e2e 约定
@@ -160,10 +160,10 @@ artifacts/quality/
 跨仓评测接口属于必须覆盖的真实 e2e 契约。
 
 - 主仓 e2e 必须真实启动 `paper_analysis.api.evaluation_server`
-- e2e 必须真实发送 `POST /v1/evaluation/annotate`
+- e2e 必须真实发送批量 `POST /v1/evaluation/annotate`
 - 至少断言一次 200 响应、schema 合法、标签协议合法
 - 响应中不得出现 `expected_label`、`ground_truth`、`split` 等评测数据泄露字段
-- 至少保留一条跨仓 e2e：由 `third_party/paper_analysis_dataset` 的评测 CLI 真实调用主仓接口并生成脱敏报告
+- 至少保留一条跨仓 e2e：由 `third_party/paper_analysis_dataset` 的评测 CLI 真实调用主仓批量接口并生成脱敏报告
 
 ## A/B 脚手架跨仓最小 e2e 约定
 
@@ -178,8 +178,8 @@ artifacts/quality/
 - 主仓真实启动 `paper_analysis.api.evaluation_server`
 - 用显式 `--algorithm-version <ab-route-or-snapshot>` 启动服务，保留本次路线或快照标识
 - 子仓真实执行：
-  - `py -m paper_analysis_dataset.tools.evaluate_paper_filter_benchmark --base-url http://127.0.0.1:<port> --limit 3 --output-dir <child-output-dir>`
-- `--limit` 取 2 到 5 之间的最小稳定值，默认推荐 `3`
+  - `py -m paper_analysis_dataset.tools.evaluate_paper_filter_benchmark --base-url http://127.0.0.1:<port> --limit 55 --output-dir <child-output-dir>`
+- 子仓评测 CLI 默认按批量协议工作，单次请求默认发送 50 条；当 `limit` 超过 50 时应自动拆成多批
 - 输出目录建议放在：
   - `third_party/paper_analysis_dataset/artifacts/test-output/evaluation-ab-e2e-minimal/`
 

@@ -28,7 +28,7 @@ class EvaluationApiIntegrationTests(unittest.TestCase):
         try:
             response = self._post_json(
                 port,
-                {"request_id": "bad-1", "paper": {"paper_id": "only-id"}},
+                {"requests": [{"request_id": "bad-1", "paper": {"paper_id": "only-id"}}]},
                 expect_error=True,
             )
             self.assertEqual("invalid_request", response["error"]["code"])
