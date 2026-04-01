@@ -28,6 +28,8 @@ py -m paper_analysis.api.evaluation_server --port 8765
 
 - 默认优先读取环境变量 `ARK_API_KEY`
 - 如需本地配置文件，请放在用户私有目录 `~/.paper-analysis/doubao.yaml`
+- 若要调用 embedding 路线，请额外配置 `doubao.embedding_model`，值应为当前账号下可直接调用的 embedding endpoint / model
+- 若 `embedding_model` 使用的是 `doubao-embedding-vision-*`，客户端会自动改走 multimodal embedding API，并允许纯文本输入
 - 仓库内只保留模板文件 `paper_analysis/config/doubao.template.yaml`，不要在 `paper_analysis/config/` 下保存真实密钥
 
 ## 自然语言如何落到命令

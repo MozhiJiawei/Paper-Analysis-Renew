@@ -7,3 +7,4 @@ doubao:
   api_key: "YOUR_API_KEY_HERE"
   base_url: "https://ark.cn-beijing.volces.com/api/v3"
   model: "doubao-seed-2-0-pro-260215"
+  embedding_model: "YOUR_EMBEDDING_ENDPOINT_OR_MODEL"

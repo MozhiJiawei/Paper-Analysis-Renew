@@ -11,7 +11,7 @@ class RouteRegistryUnitTests(unittest.TestCase):
 
         self.assertEqual(
             [
-                "embedding_retriever_stub",
+                "embedding_similarity_binary",
                 "llm_judge_stub",
                 "local_classifier_stub",
                 "two_stage_stub",
@@ -24,7 +24,11 @@ class RouteRegistryUnitTests(unittest.TestCase):
 
         routes = registry.create_routes()
 
-        self.assertTrue(all(route.implementation_status == "stub" for route in routes))
+        statuses = {route.route_name: route.implementation_status for route in routes}
+        self.assertEqual("ready", statuses["embedding_similarity_binary"])
+        self.assertEqual("stub", statuses["llm_judge_stub"])
+        self.assertEqual("stub", statuses["local_classifier_stub"])
+        self.assertEqual("stub", statuses["two_stage_stub"])
         self.assertEqual(4, len(routes))
 
 

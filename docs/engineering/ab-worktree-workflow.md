@@ -72,6 +72,13 @@
 3. 不在路线 worktree 中改共享 runner、summary、leaderboard 或 manifest schema，除非先回到主线讨论共享协议变更。
 4. 用假实现或真实实现验证该路线能从 `stub` 变为 `ready`，同时不影响其他路线的状态归一化。
 
+当前这条 embedding worktree 路线约定为：
+
+- route_name: `embedding_similarity_binary`
+- 默认通过 `~/.paper-analysis/doubao.yaml` 中的 `doubao.embedding_model` 调用 Doubao embedding
+- 若未配置可调用的 embedding endpoint / model，则该路线应以结构化原因回退为 `stub`，而不是直接破坏整轮 A/B 运行
+- A 路线当前实验记录见 `docs/engineering/embedding-sim-binary-a-route-notes.md`
+
 ## 与公开 API 的关系
 
 离线 A/B 脚手架当前不接管 `POST /v1/evaluation/annotate` 的默认预测器。
