@@ -8,6 +8,33 @@ from paper_analysis.api.evaluation_protocol import (
     EvaluationPrediction,
     EvaluationProtocolError,
 )
+from paper_analysis.evaluation.ab_protocol import BinaryRoutePrediction
+from paper_analysis.evaluation.routes.base import BaseBinaryRoute
+
+
+class _FakePositiveRoute(BaseBinaryRoute):
+    def __init__(self) -> None:
+        super().__init__(
+            route_name="fake",
+            algorithm_version="fake-v1",
+            capability_type="test",
+            implementation_status="ready",
+        )
+
+    def predict_many(self, papers: list[EvaluationPaper]) -> list[BinaryRoutePrediction]:
+        return [
+            BinaryRoutePrediction(
+                paper_id=paper.paper_id,
+                prediction=EvaluationPrediction(
+                    primary_research_object="LLM",
+                    preference_labels=["解码策略优化"],
+                    negative_tier="positive",
+                    evidence_spans={"general": [paper.title], "解码策略优化": [paper.title]},
+                    notes="fake route",
+                ),
+            )
+            for paper in papers
+        ]
 
 
 class EvaluationApiUnitTests(unittest.TestCase):
@@ -24,7 +51,7 @@ class EvaluationApiUnitTests(unittest.TestCase):
             keywords=["speculative decoding"],
         )
 
-        prediction = EvaluationPredictor().predict(paper)
+        prediction = EvaluationPredictor(route=_FakePositiveRoute()).predict(paper)
 
         self.assertEqual("positive", prediction.negative_tier)
         self.assertEqual(["解码策略优化"], prediction.preference_labels)
