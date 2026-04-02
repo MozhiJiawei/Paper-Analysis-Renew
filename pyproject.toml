@@ -9,7 +9,10 @@ description = "Agent-first paper filtering foundation"
 requires-python = ">=3.11"
 dependencies = [
     "Jinja2>=3.1,<4",
+    "mypy>=1.18,<2",
     "PyYAML>=6,<7",
+    "radon>=6,<7",
+    "ruff>=0.13,<0.14",
     "volcengine-python-sdk>=1.0.129,<2",
 ]
 
@@ -21,3 +24,37 @@ include = ["paper_analysis*"]
 
 [tool.setuptools.package-data]
 "paper_analysis" = ["templates/*.j2", "config/*.template.yaml"]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+exclude = ["artifacts", "third_party"]
+
+[tool.ruff.lint]
+select = ["B", "C90", "E", "F", "I"]
+ignore = ["E501"]
+
+[tool.ruff.lint.mccabe]
+max-complexity = 12
+
+[tool.ruff.lint.per-file-ignores]
+"scripts/quality/lint.py" = ["E402"]
+"scripts/quality/run_unittest_stage.py" = ["E402"]
+
+[tool.mypy]
+python_version = "3.11"
+pretty = true
+show_error_codes = true
+warn_unused_ignores = true
+explicit_package_bases = true
+files = [
+    "paper_analysis/domain/paper.py",
+    "paper_analysis/domain/preference.py",
+    "paper_analysis/api/evaluation_protocol.py",
+    "paper_analysis/api/evaluation_predictor.py",
+    "paper_analysis/api/evaluation_server.py",
+    "paper_analysis/sources/arxiv/api_client.py",
+    "paper_analysis/sources/arxiv/atom_parser.py",
+    "paper_analysis/sources/arxiv/subscription_loader.py",
+    "paper_analysis/services/report_writer.py",
+]

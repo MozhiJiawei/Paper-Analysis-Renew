@@ -30,6 +30,7 @@ description: "Use when working in this repository on conference paper filtering,
 - `py -m paper_analysis.cli.main --help`
 - `py -m paper_analysis.cli.main conference --help`
 - `py -m paper_analysis.cli.main arxiv --help`
+- `py -m paper_analysis.cli.main quality lint`
 - `py -m paper_analysis.cli.main quality local-ci`
 - `py -m paper_analysis.cli.main report --source conference`
 

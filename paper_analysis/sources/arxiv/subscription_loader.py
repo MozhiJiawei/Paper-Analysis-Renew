@@ -7,7 +7,6 @@ from paper_analysis.domain.paper import Paper
 from paper_analysis.sources.arxiv.api_client import ArxivApiClient
 from paper_analysis.sources.arxiv.atom_parser import parse_atom_feed
 
-
 DEFAULT_CATEGORIES = ["cs.AI", "cs.CL", "cs.CV", "cs.DC", "cs.MA"]
 DATE_PATTERN = re.compile(r"(\d{4})-(\d{2})/\d{2}-(\d{2})")
 

@@ -28,7 +28,6 @@ py -m paper_analysis.cli.main <namespace> <action> [options]
 
 - `quality local-ci`
 - `quality lint`
-- `quality typecheck`
 - `quality unit`
 - `quality integration`
 - `quality e2e`

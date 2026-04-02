@@ -46,6 +46,14 @@
 7. 如果命令面、自然语言路由或 skill 触发语义发生变化，同时刷新 Codex 黑盒 e2e 的 prompt 与断言
 8. 如果新增或修改跨仓评测 API，同时维护主仓与子仓两侧的真实 e2e，至少覆盖一次真实 `POST /v1/evaluation/annotate`
 
+### 静态质量职责边界
+
+- `quality lint` 是唯一静态质量入口，不再保留独立 `quality typecheck`
+- 仓库特有文本规则保留在 `scripts/quality/lint.py`
+- Python 通用静态问题优先交给 `ruff`
+- 真实类型检查优先交给 `mypy`
+- 治理类榜单默认只告警，不阻断 `quality lint`
+
 ## 维护 skill
 
 以下变化必须同步更新 `.codex/skills/paper-analysis/`：

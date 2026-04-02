@@ -6,7 +6,6 @@ from datetime import datetime
 from paper_analysis.cli.common import CliInputError
 from paper_analysis.domain.paper import Paper
 
-
 ATOM_NAMESPACE = {
     "atom": "http://www.w3.org/2005/Atom",
     "arxiv": "http://arxiv.org/schemas/atom",

@@ -8,7 +8,6 @@ import urllib.request
 
 from paper_analysis.cli.common import CliInputError
 
-
 API_URL = "https://export.arxiv.org/api/query"
 REQUEST_INTERVAL_SECONDS = 3.0
 DEFAULT_USER_AGENT = "paper-analysis/1.0 (arxiv subscription ingestion)"
@@ -16,7 +15,7 @@ DEFAULT_USER_AGENT = "paper-analysis/1.0 (arxiv subscription ingestion)"
 try:
     import certifi
 
-    SSL_CONTEXT = ssl.create_default_context(cafile=certifi.where())
+    SSL_CONTEXT: ssl.SSLContext | None = ssl.create_default_context(cafile=certifi.where())
 except ImportError:
     SSL_CONTEXT = None
 

@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-
 PREFERENCE_LABELS = (
     "解码策略优化",
     "上下文与缓存优化",
@@ -43,8 +42,10 @@ def _as_text(field_name: str, value: object, *, required: bool = True) -> str:
 
 
 def _as_int(field_name: str, value: object) -> int:
+    if isinstance(value, int):
+        return value
     try:
-        return int(value)
+        return int(_as_text(field_name, value))
     except (TypeError, ValueError) as exc:
         raise EvaluationProtocolError(f"{field_name} 必须是整数") from exc
 
@@ -133,16 +134,16 @@ class EvaluationPaper:
         if not isinstance(payload, dict):
             raise EvaluationProtocolError("paper 必须是对象")
         return cls(
-            paper_id=payload.get("paper_id"),
-            title=payload.get("title"),
-            abstract=payload.get("abstract"),
-            abstract_zh=payload.get("abstract_zh", ""),
-            authors=payload.get("authors", []),
-            venue=payload.get("venue"),
-            year=payload.get("year"),
-            source=payload.get("source"),
-            source_path=payload.get("source_path"),
-            keywords=payload.get("keywords", []),
+            paper_id=_as_text("paper.paper_id", payload.get("paper_id")),
+            title=_as_text("paper.title", payload.get("title")),
+            abstract=_as_text("paper.abstract", payload.get("abstract")),
+            abstract_zh=_as_text("paper.abstract_zh", payload.get("abstract_zh", ""), required=False),
+            authors=_as_text_list("paper.authors", payload.get("authors", [])),
+            venue=_as_text("paper.venue", payload.get("venue")),
+            year=_as_int("paper.year", payload.get("year")),
+            source=_as_text("paper.source", payload.get("source")),
+            source_path=_as_text("paper.source_path", payload.get("source_path")),
+            keywords=_as_text_list("paper.keywords", payload.get("keywords", [])),
         )
 
     def to_dict(self) -> dict[str, object]:
@@ -173,7 +174,7 @@ class EvaluationRequest:
         if not isinstance(payload, dict):
             raise EvaluationProtocolError("请求体必须是 JSON 对象")
         return cls(
-            request_id=payload.get("request_id"),
+            request_id=_as_text("request_id", payload.get("request_id")),
             paper=EvaluationPaper.from_dict(payload.get("paper")),
         )
 

@@ -7,7 +7,6 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any
 
-
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
 
@@ -20,7 +19,6 @@ CATEGORY_LABELS: dict[str, str] = {
 
 STAGE_TO_CATEGORY: dict[str, str] = {
     "lint": "quality_checks",
-    "typecheck": "quality_checks",
     "unit": "unit_tests",
     "integration": "unit_tests",
     "e2e": "e2e_tests",
@@ -29,10 +27,41 @@ STAGE_TO_CATEGORY: dict[str, str] = {
 
 STAGE_SOURCE_LABELS: dict[str, str] = {
     "lint": "lint",
-    "typecheck": "typecheck",
     "unit": "unit",
     "integration": "integration",
     "e2e": "e2e",
+}
+
+
+LINT_CASE_METADATA: dict[str, dict[str, str]] = {
+    "repo_rules": {
+        "title": "仓库规范检查",
+        "description": "检查 UTF-8、疑似乱码片段，以及非 Python 文本文件的基础卫生规则。",
+        "failure_check": "命令退出码非 0 时判定失败。",
+        "source_label": "repo rules",
+        "script_path": str(REPO_ROOT / "scripts" / "quality" / "lint.py"),
+    },
+    "ruff": {
+        "title": "Ruff Python 静态检查",
+        "description": "检查 Python 文件的通用静态问题，例如未使用导入、重复定义与 import 风格。",
+        "failure_check": "命令退出码非 0 时判定失败。",
+        "source_label": "ruff",
+        "script_path": "py -m ruff check .",
+    },
+    "mypy": {
+        "title": "Mypy 类型检查",
+        "description": "在首批核心结构化模块上执行真实类型检查，避免只检查注解存在性的假安全感。",
+        "failure_check": "命令退出码非 0 时判定失败。",
+        "source_label": "mypy",
+        "script_path": "py -m mypy --config-file pyproject.toml",
+    },
+    "quality_report": {
+        "title": "代码质量治理报告",
+        "description": "输出复杂度、长函数、大文件与模块依赖热点，默认只告警不阻断。",
+        "failure_check": "该子检查只提供治理提示，不影响 quality lint 的退出码。",
+        "source_label": "quality report",
+        "script_path": str(REPO_ROOT / "scripts" / "quality" / "quality_report.py"),
+    },
 }
 
 
@@ -105,7 +134,7 @@ def build_stage_case_result(
     return QualityCaseResult(
         stage_name=stage_name,
         case_id=f"quality.{stage_name}",
-        title=f"{stage_name} 检查",
+        title=f"{stage_name} 阶段",
         status=status,
         description=description,
         failure_check="命令退出码非 0 时判定失败。",
@@ -114,6 +143,38 @@ def build_stage_case_result(
         source_label=STAGE_SOURCE_LABELS.get(stage_name, stage_name),
         artifact_paths=[artifact_path],
         script_path=_infer_quality_script_path(stage_name),
+    )
+
+
+def build_lint_case_result(
+    *,
+    case_key: str,
+    status: str,
+    summary: str,
+    output: str,
+    artifact_paths: list[str] | None = None,
+    extra_process_logs: list[str] | None = None,
+) -> QualityCaseResult:
+    metadata = LINT_CASE_METADATA[case_key]
+    process_log = [
+        "执行阶段：lint",
+        f"执行子检查：{case_key}",
+        f"摘要：{summary}",
+    ]
+    if extra_process_logs:
+        process_log.extend(extra_process_logs)
+    return QualityCaseResult(
+        stage_name="lint",
+        case_id=f"quality.lint.{case_key}",
+        title=metadata["title"],
+        status=status,
+        description=metadata["description"],
+        failure_check=metadata["failure_check"],
+        process_log=process_log,
+        result_log=output.strip() or "无输出。",
+        source_label=metadata["source_label"],
+        artifact_paths=artifact_paths or [],
+        script_path=metadata["script_path"],
     )
 
 
@@ -235,8 +296,8 @@ def _coerce_string_list(value: Any) -> list[str]:
 
 
 def _infer_quality_script_path(stage_name: str) -> str:
-    if stage_name in {"lint", "typecheck"}:
-        return str(REPO_ROOT / "scripts" / "quality" / f"{stage_name}.py")
+    if stage_name == "lint":
+        return str(REPO_ROOT / "scripts" / "quality" / "lint.py")
     return ""
 
 

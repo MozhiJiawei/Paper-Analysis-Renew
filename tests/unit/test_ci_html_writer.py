@@ -8,7 +8,6 @@ from pathlib import Path
 from paper_analysis.services.ci_html_writer import QualityStageResult, write_ci_html_report
 from paper_analysis.services.quality_case_support import QualityCaseResult, write_case_results
 
-
 ROOT_DIR = Path(__file__).resolve().parents[2]
 
 
@@ -244,8 +243,8 @@ class CIHtmlWriterTests(unittest.TestCase):
         self.assertIn("result.json 存在但无法解析", html)
         self.assertIn("失败", html)
 
-    def test_write_ci_html_report_sorts_e2e_cases_by_title(self) -> None:
-        """验证 E2E 用例按标题名称排序显示。"""
+    def test_write_ci_html_report_prioritizes_failed_and_warning_cases(self) -> None:
+        """验证 HTML 列表会优先展示失败与告警用例，再按标题排序。"""
 
         artifacts_dir = ROOT_DIR / "artifacts" / "test-output" / "ci-html-sort-by-title"
         if artifacts_dir.exists():
@@ -259,7 +258,7 @@ class CIHtmlWriterTests(unittest.TestCase):
                         stage_name="e2e",
                         case_id="e2e.z",
                         title="【推荐】主仓推荐算法评测接口可用",
-                        status="passed",
+                        status="warning",
                         description="desc",
                         failure_check="check",
                         process_log=["step"],
@@ -270,7 +269,7 @@ class CIHtmlWriterTests(unittest.TestCase):
                         stage_name="e2e",
                         case_id="e2e.a",
                         title="【arxiv】arXiv API 可以正常获取论文",
-                        status="passed",
+                        status="failed",
                         description="desc",
                         failure_check="check",
                         process_log=["step"],
@@ -313,6 +312,7 @@ class CIHtmlWriterTests(unittest.TestCase):
         conference_index = html.index("【顶会】顶会论文筛选可以正常生成结果")
         self.assertLess(arxiv_index, recommend_index)
         self.assertLess(recommend_index, conference_index)
+        self.assertIn("告警", html)
 
     def _write_e2e_payloads(self, artifacts_dir: Path) -> None:
         conference_dir = artifacts_dir / "e2e" / "conference" / "latest"

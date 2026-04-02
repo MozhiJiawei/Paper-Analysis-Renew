@@ -12,15 +12,13 @@ from paper_analysis.services.quality_case_support import (
     load_case_results,
 )
 
-
 REPO_ROOT = Path(__file__).resolve().parents[2]
 TEMPLATE_DIR = Path(__file__).resolve().parents[1] / "templates"
 TEMPLATE_NAME = "ci_report.html.j2"
 
 
 STAGE_DESCRIPTIONS: dict[str, str] = {
-    "lint": "检查 UTF-8、行尾空格、制表符与结尾换行。",
-    "typecheck": "检查公开函数的类型注解边界。",
+    "lint": "依次执行仓库规范检查、Ruff、Mypy 与代码质量治理报告。",
     "unit": "验证共享领域模型、筛选逻辑与报告写入逻辑。",
     "integration": "验证 CLI 与 pipeline 的跨层协作。",
     "e2e": "验证顶会与 arXiv 黄金链路及其报告产物。",
@@ -30,6 +28,7 @@ STAGE_DESCRIPTIONS: dict[str, str] = {
 STATUS_LABELS: dict[str, str] = {
     "passed": "通过",
     "failed": "失败",
+    "warning": "告警",
     "skipped": "未执行",
     "missing": "缺失",
 }
@@ -37,9 +36,10 @@ STATUS_LABELS: dict[str, str] = {
 
 STATUS_PRIORITY: dict[str, int] = {
     "failed": 0,
-    "missing": 1,
-    "skipped": 2,
-    "passed": 3,
+    "warning": 1,
+    "missing": 2,
+    "skipped": 3,
+    "passed": 4,
 }
 
 
@@ -94,6 +94,7 @@ def write_ci_html_report(
         total_cases=sum(category["total_count"] for category in case_categories),
         passed_count=sum(1 for item in stage_results if item.status == "passed"),
         failed_count=sum(1 for item in stage_results if item.status == "failed"),
+        warning_count=sum(category["warning_count"] for category in case_categories),
         skipped_count=sum(1 for item in stage_results if item.status == "skipped"),
     )
     report_path.write_text(html, encoding="utf-8")
@@ -162,6 +163,7 @@ def _build_case_categories(
                 "total_count": len(cases),
                 "passed_count": sum(1 for item in cases if item.status == "passed"),
                 "failed_count": sum(1 for item in cases if item.status == "failed"),
+                "warning_count": sum(1 for item in cases if item.status == "warning"),
                 "skipped_count": sum(1 for item in cases if item.status == "skipped"),
             }
         )
@@ -172,9 +174,9 @@ def _sort_cases(cases: list[QualityCaseResult]) -> list[QualityCaseResult]:
     return sorted(
         cases,
         key=lambda item: (
+            STATUS_PRIORITY.get(item.status, 99),
             item.title,
             item.source_label,
-            STATUS_PRIORITY.get(item.status, 99),
         ),
     )
 
@@ -221,6 +223,8 @@ def _serialize_case_result(case: QualityCaseResult) -> dict[str, object]:
 def _status_from_cases(cases: list[QualityCaseResult]) -> str:
     if any(item.status == "failed" for item in cases):
         return "failed"
+    if any(item.status == "warning" for item in cases):
+        return "warning"
     if cases and all(item.status == "passed" for item in cases):
         return "passed"
     return "skipped"

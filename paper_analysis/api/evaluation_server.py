@@ -1,10 +1,10 @@
 from __future__ import annotations
 
+import json
 from argparse import ArgumentParser
 from concurrent.futures import ThreadPoolExecutor
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-import json
 from typing import Any
 
 from paper_analysis.api.evaluation_predictor import EvaluationPredictor
