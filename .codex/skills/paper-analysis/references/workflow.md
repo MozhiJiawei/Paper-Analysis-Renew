@@ -44,10 +44,16 @@ py -m paper_analysis.cli.main quality local-ci
 执行顺序：
 
 1. `lint`
-2. `typecheck`
-3. `unit`
-4. `integration`
-5. `e2e`
+2. `unit`
+3. `integration`
+4. `e2e`
+
+`quality lint` 内部固定执行：
+
+1. 仓库规范检查
+2. `ruff`
+3. `mypy`
+4. 代码质量治理报告（仅告警）
 
 ## 最近报告
 

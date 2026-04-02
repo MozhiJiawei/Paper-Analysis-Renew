@@ -6,7 +6,6 @@ import sys
 import unittest
 from pathlib import Path
 
-
 ROOT_DIR = Path(__file__).resolve().parents[2]
 
 
@@ -75,6 +74,8 @@ class CliHelpTests(unittest.TestCase):
         self.assertIn("--max-results", result.stdout)
 
     def test_quality_help_lists_stable_quality_commands(self) -> None:
+        """验证 quality 命令面保留稳定入口，并移除旧 typecheck 子命令。"""
+
         env = os.environ.copy()
         env["PYTHONUTF8"] = "1"
         env["PYTHONIOENCODING"] = "utf-8"
@@ -93,6 +94,7 @@ class CliHelpTests(unittest.TestCase):
         self.assertEqual(0, result.returncode)
         self.assertIn("local-ci", result.stdout)
         self.assertIn("lint", result.stdout)
+        self.assertNotIn("typecheck", result.stdout)
         self.assertNotIn("\ufffd", result.stdout)
 
 

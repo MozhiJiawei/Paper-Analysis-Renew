@@ -23,15 +23,27 @@ class QualityHtmlIntegrationTests(unittest.TestCase):
             with (
                 patch.object(quality, "ROOT_DIR", root_dir),
                 patch.object(quality, "ARTIFACTS_DIR", artifacts_dir),
+                patch.object(quality, "QUALITY_STAGES", ["lint", "unit"]),
                 patch.object(
                     quality,
-                    "QUALITY_STAGES",
+                    "LINT_SUBCHECKS",
                     [
-                        ("lint", [sys.executable, "-c", "print('lint ok')"]),
-                        ("unit", [sys.executable, "-c", "print('unit ok')"]),
+                        ("repo_rules", [sys.executable, "-c", "print('repo rules ok')"]),
+                        ("ruff", [sys.executable, "-c", "print('ruff ok')"]),
+                        ("mypy", [sys.executable, "-c", "print('mypy ok')"]),
+                        ("quality_report", [sys.executable, "-c", "print('[OK] quality report')"]),
                     ],
                 ),
-                patch.object(quality, "UNITTEST_STAGE_CONFIG", {}),
+                patch.object(
+                    quality,
+                    "UNITTEST_STAGE_CONFIG",
+                    {},
+                ),
+                patch.object(
+                    quality,
+                    "STAGE_COMMAND_OVERRIDES",
+                    {"unit": [sys.executable, "-c", "print('unit ok')"]},
+                ),
             ):
                 exit_code = quality.handle_local_ci(Namespace())
 
@@ -41,7 +53,8 @@ class QualityHtmlIntegrationTests(unittest.TestCase):
             self.assertIn("质量检查", html)
             self.assertIn("单元测试", html)
             self.assertIn("用例过程", html)
-            self.assertIn("lint ok", html)
+            self.assertIn("repo rules ok", html)
+            self.assertIn("Ruff Python 静态检查", html)
             self.assertIn("Reasoning Agents with Tool Feedback", html)
 
     def test_handle_local_ci_writes_html_on_failure_and_marks_skipped_cases(self) -> None:
@@ -57,13 +70,15 @@ class QualityHtmlIntegrationTests(unittest.TestCase):
             with (
                 patch.object(quality, "ROOT_DIR", root_dir),
                 patch.object(quality, "ARTIFACTS_DIR", artifacts_dir),
+                patch.object(quality, "QUALITY_STAGES", ["lint", "unit", "e2e"]),
                 patch.object(
                     quality,
-                    "QUALITY_STAGES",
+                    "LINT_SUBCHECKS",
                     [
-                        ("lint", [sys.executable, "-c", "import sys; print('lint failed'); sys.exit(1)"]),
-                        ("unit", []),
-                        ("e2e", []),
+                        ("repo_rules", [sys.executable, "-c", "import sys; print('repo rules failed'); sys.exit(1)"]),
+                        ("ruff", [sys.executable, "-c", "print('ruff ok')"]),
+                        ("mypy", [sys.executable, "-c", "print('mypy ok')"]),
+                        ("quality_report", [sys.executable, "-c", "print('[OK] quality report')"]),
                     ],
                 ),
                 patch.object(
@@ -74,13 +89,14 @@ class QualityHtmlIntegrationTests(unittest.TestCase):
                         "e2e": {"start_dir": "tests/e2e", "pattern": "test_*.py"},
                     },
                 ),
+                patch.object(quality, "STAGE_COMMAND_OVERRIDES", {}),
             ):
                 exit_code = quality.handle_local_ci(Namespace())
 
             self.assertEqual(1, exit_code)
             html = (artifacts_dir / "quality" / "local-ci-latest.html").read_text(encoding="utf-8")
             self.assertIn("整体结果：失败", html)
-            self.assertIn("lint failed", html)
+            self.assertIn("repo rules failed", html)
             self.assertIn("前置阶段失败，本用例未执行。", html)
 
     def test_handle_local_ci_still_writes_html_when_e2e_json_is_invalid(self) -> None:
@@ -93,14 +109,24 @@ class QualityHtmlIntegrationTests(unittest.TestCase):
             (artifacts_dir / "e2e" / "conference" / "latest" / "result.json").write_text("{", encoding="utf-8")
 
             commands = {
-                "lint": [sys.executable, "-c", "print('lint ok')"],
                 "unit": [sys.executable, "-c", "print('unit ok')"],
             }
             with (
                 patch.object(quality, "ROOT_DIR", root_dir),
                 patch.object(quality, "ARTIFACTS_DIR", artifacts_dir),
-                patch.object(quality, "QUALITY_STAGES", list(commands.items())),
+                patch.object(quality, "QUALITY_STAGES", ["lint", "unit"]),
+                patch.object(
+                    quality,
+                    "LINT_SUBCHECKS",
+                    [
+                        ("repo_rules", [sys.executable, "-c", "print('repo rules ok')"]),
+                        ("ruff", [sys.executable, "-c", "print('ruff ok')"]),
+                        ("mypy", [sys.executable, "-c", "print('mypy ok')"]),
+                        ("quality_report", [sys.executable, "-c", "print('[WARN] quality report\\n1. hotspot')"]),
+                    ],
+                ),
                 patch.object(quality, "UNITTEST_STAGE_CONFIG", {}),
+                patch.object(quality, "STAGE_COMMAND_OVERRIDES", commands),
             ):
                 exit_code = quality.handle_local_ci(Namespace())
 
@@ -108,6 +134,7 @@ class QualityHtmlIntegrationTests(unittest.TestCase):
             html = (artifacts_dir / "quality" / "local-ci-latest.html").read_text(encoding="utf-8")
             self.assertIn("result.json 存在但无法解析", html)
             self.assertIn("顶会报告", html)
+            self.assertIn("告警", html)
 
     def _write_e2e_payloads(self, artifacts_dir: Path) -> None:
         conference_dir = artifacts_dir / "e2e" / "conference" / "latest"

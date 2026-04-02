@@ -10,7 +10,7 @@ if str(ROOT_DIR) not in sys.path:
 from paper_analysis.shared.encoding import find_mojibake_fragments
 
 TARGET_DIRS = ["paper_analysis", "tests", "scripts", ".codex", "docs", "AGENTS.md", "README.md"]
-TEXT_SUFFIXES = {".py", ".md", ".json", ".toml"}
+TEXT_SUFFIXES = {".py", ".md", ".json", ".toml", ".txt", ".yaml", ".yml"}
 ALLOW_MOJIBAKE_MARKER = "lint: allow-mojibake"
 
 
@@ -51,20 +51,21 @@ def check_file(path: Path) -> list[str]:
     except UnicodeDecodeError as exc:
         return [f"{path}: 非 UTF-8 文件 ({exc})"]
 
-    lines = content.splitlines()
-    for index, line in enumerate(lines, start=1):
-        if line.rstrip(" ") != line:
-            violations.append(f"{path}:{index}: 行尾存在多余空格")
-        if "\t" in line:
-            violations.append(f"{path}:{index}: 存在制表符")
-
-    if content and not content.endswith("\n"):
-        violations.append(f"{path}: 文件结尾缺少换行")
-
     if ALLOW_MOJIBAKE_MARKER not in content:
         fragments = find_mojibake_fragments(content)
         for fragment in fragments:
             violations.append(f"{path}: 检测到疑似乱码片段 `{fragment}`")
+
+    if path.suffix.lower() != ".py":
+        lines = content.splitlines()
+        for index, line in enumerate(lines, start=1):
+            if line.rstrip(" ") != line:
+                violations.append(f"{path}:{index}: 行尾存在多余空格")
+            if "\t" in line:
+                violations.append(f"{path}:{index}: 存在制表符")
+
+        if content and not content.endswith("\n"):
+            violations.append(f"{path}: 文件结尾缺少换行")
 
     return violations
 

@@ -14,6 +14,7 @@
       --border: #d6c9b8;
       --passed: #1d6b43;
       --failed: #ab2f2f;
+      --warning: #a05a00;
       --skipped: #8a6d1f;
       --missing: #7d4f9e;
       --code: #f2ece1;
@@ -62,6 +63,7 @@
     }
     .status-passed { color: var(--passed); }
     .status-failed { color: var(--failed); }
+    .status-warning { color: var(--warning); }
     .status-skipped { color: var(--skipped); }
     .status-missing { color: var(--missing); }
     .kpi {
@@ -294,6 +296,7 @@
         <span>用例数：{{ total_cases }}</span>
         <span>阶段通过：{{ passed_count }}</span>
         <span>阶段失败：{{ failed_count }}</span>
+        <span>用例告警：{{ warning_count }}</span>
         <span>阶段未执行：{{ skipped_count }}</span>
       </div>
     </section>
@@ -313,6 +316,7 @@
         <span>总数：{{ category.total_count }}</span>
         <span>通过：{{ category.passed_count }}</span>
         <span>失败：{{ category.failed_count }}</span>
+        <span>告警：{{ category.warning_count }}</span>
         <span>未执行：{{ category.skipped_count }}</span>
       </div>
 
@@ -327,6 +331,7 @@
           <div class="filter-group">
             <button type="button" class="filter-chip is-active" data-status-filter="all">全部</button>
             <button type="button" class="filter-chip" data-status-filter="failed">失败</button>
+            <button type="button" class="filter-chip" data-status-filter="warning">告警</button>
             <button type="button" class="filter-chip" data-status-filter="skipped">未执行</button>
             <button type="button" class="filter-chip" data-status-filter="passed">通过</button>
           </div>

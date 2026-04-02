@@ -5,8 +5,10 @@
 当前仓库的质量门禁以 `unittest` 和自定义质量脚本为基础，统一通过稳定的 CLI 入口执行。
 
 - `unittest` 负责 unit、integration、e2e 测试
-- `lint` 脚本检查 UTF-8、行尾空格、制表符、文件结尾换行，以及常见乱码片段（支持通过 `lint: allow-mojibake` 显式豁免）
-- `typecheck` 脚本检查公开函数的类型注解边界
+- `lint` 阶段统一执行仓库规范检查、`ruff`、`mypy` 与代码质量治理报告
+- 仓库规范检查只负责 UTF-8、常见乱码片段，以及非 Python 文本文件的空白字符卫生规则
+- `ruff` 负责 Python 通用静态质量，`mypy` 负责首批核心结构化模块的真实类型检查
+- 代码质量治理报告默认只告警，不阻断 `quality lint`
 - `Jinja2` 负责静态 HTML 审核页渲染
 
 ## 统一入口
@@ -18,16 +20,22 @@ py -m paper_analysis.cli.main quality local-ci
 执行顺序：
 
 1. `lint`
-2. `typecheck`
-3. `unit`
-4. `integration`
-5. `e2e`
+2. `unit`
+3. `integration`
+4. `e2e`
 
 执行完成后，除了终端输出，还会生成供人工审核的 HTML 汇总页：
 
 ```text
 artifacts/quality/local-ci-latest.html
 ```
+
+`quality lint` 内部固定拆成四段：
+
+1. 仓库规范检查
+2. `ruff`
+3. `mypy`
+4. 代码质量治理报告（只告警，不阻断）
 
 补充约束：
 
@@ -124,8 +132,10 @@ artifact: artifacts/quality/integration-latest.txt
 artifacts/quality/
   lint-latest.txt
   lint-cases-latest.json
-  typecheck-latest.txt
-  typecheck-cases-latest.json
+  lint-repo_rules-latest.txt
+  lint-ruff-latest.txt
+  lint-mypy-latest.txt
+  lint-quality_report-latest.txt
   unit-latest.txt
   unit-cases-latest.json
   integration-latest.txt
@@ -139,6 +149,7 @@ artifacts/quality/
 
 - `*-latest.txt` 保留每个阶段的原始 stdout / stderr
 - `*-cases-latest.json` 保留该阶段的逐用例结构化结果
+- `lint-cases-latest.json` 会细分为仓库规范失败、`ruff` 失败、`mypy` 失败和治理告警四类子结果
 - `local-ci-latest.html` 用于人工审核
 
 ## 状态判定约定

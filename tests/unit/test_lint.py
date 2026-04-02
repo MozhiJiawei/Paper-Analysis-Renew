@@ -30,6 +30,35 @@ class LintTests(unittest.TestCase):
 
         self.assertEqual([], violations)
 
+    def test_check_file_skips_python_whitespace_hygiene_rules(self) -> None:
+        """验证 Python 文件的尾随空格与 Tab 交给 Ruff，而不是 repo rules 重复报错。"""
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            path = Path(temp_dir) / "sample.py"
+            path.write_text("def demo():    \n\treturn 1", encoding="utf-8")
+
+            violations = check_file(path)
+
+        self.assertEqual([], violations)
+
+    def test_check_file_keeps_non_python_whitespace_hygiene_rules(self) -> None:
+        """验证非 Python 文本文件仍会执行仓库特有的空白字符卫生检查。"""
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            path = Path(temp_dir) / "notes.md"
+            path.write_text("标题  \n\t正文", encoding="utf-8")
+
+            violations = check_file(path)
+
+        self.assertEqual(
+            [
+                f"{path}:1: 行尾存在多余空格",
+                f"{path}:2: 存在制表符",
+                f"{path}: 文件结尾缺少换行",
+            ],
+            violations,
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
