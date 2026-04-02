@@ -64,7 +64,7 @@ class EvaluationPredictor:
                 preference_labels=[],
                 negative_tier="negative",
                 evidence_spans={"negative": evidence},
-                notes="未检测到六个偏好标签中的明确主优化杠杆。",
+                notes="未检测到五个偏好标签中的明确主优化杠杆。",
             )
 
         evidence = _extract_evidence(source_texts, label_keywords)
@@ -191,18 +191,6 @@ class EvaluationPredictor:
                 ),
             ),
             (
-                "模型结构侧推理优化",
-                (
-                    "retrieval head",
-                    "streaming head",
-                    "auxiliary transformer",
-                    "layer reconfiguration",
-                    "runtime reconfiguration",
-                    "inference-time architecture",
-                    "selective head",
-                ),
-            ),
-            (
                 "模型压缩",
                 (
                     "quantization",
@@ -225,4 +213,3 @@ class EvaluationPredictor:
             if _contains_any(text, keywords):
                 return label, keywords
         return None, ()
-

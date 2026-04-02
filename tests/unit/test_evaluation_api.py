@@ -30,6 +30,25 @@ class EvaluationApiUnitTests(unittest.TestCase):
         self.assertEqual(["解码策略优化"], prediction.preference_labels)
         self.assertEqual("LLM", prediction.primary_research_object)
 
+    def test_predictor_does_not_emit_removed_structure_label(self) -> None:
+        paper = EvaluationPaper(
+            paper_id="paper-structure-only",
+            title="Selective Head Reconfiguration for Transformer Inference",
+            abstract="We study selective head and runtime reconfiguration during inference.",
+            authors=["Alice"],
+            venue="ICLR 2026",
+            year=2026,
+            source="conference",
+            source_path="tests.json",
+            keywords=["selective head", "runtime reconfiguration"],
+        )
+
+        prediction = EvaluationPredictor().predict(paper)
+
+        self.assertEqual("negative", prediction.negative_tier)
+        self.assertEqual([], prediction.preference_labels)
+        self.assertIn("五个偏好标签", prediction.notes)
+
     def test_negative_prediction_clears_preference_labels(self) -> None:
         prediction = EvaluationPrediction(
             primary_research_object="评测 / Benchmark / 数据集",
@@ -48,6 +67,15 @@ class EvaluationApiUnitTests(unittest.TestCase):
                 preference_labels=["解码策略优化", "系统与调度优化"],
                 negative_tier="positive",
                 evidence_spans={"general": ["bad"]},
+            )
+
+    def test_protocol_rejects_removed_structure_label(self) -> None:
+        with self.assertRaises(EvaluationProtocolError):
+            EvaluationPrediction(
+                primary_research_object="LLM",
+                preference_labels=["模型结构侧推理优化"],
+                negative_tier="positive",
+                evidence_spans={"模型结构侧推理优化": ["bad"]},
             )
 
 

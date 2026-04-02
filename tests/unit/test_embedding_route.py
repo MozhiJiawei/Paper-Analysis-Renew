@@ -85,6 +85,12 @@ def _paper(
 
 
 class EmbeddingRouteUnitTests(unittest.TestCase):
+    def test_positive_anchors_do_not_include_removed_structure_label(self) -> None:
+        self.assertNotIn(
+            "模型结构侧推理优化",
+            [anchor.label for anchor in POSITIVE_ANCHORS],
+        )
+
     def test_prepare_falls_back_to_stub_without_embedding_model(self) -> None:
         route = EmbeddingRetrieverStubRoute(client=FakeDoubaoClient(embedding_model=None))
 

@@ -35,10 +35,6 @@ POSITIVE_ANCHORS: tuple[SimilarityAnchor, ...] = (
         text="GPU kernel and fused operator optimization for transformer inference, attention kernels and compiler-level acceleration.",
     ),
     SimilarityAnchor(
-        label="模型结构侧推理优化",
-        text="Inference-time architecture optimization with retrieval heads, selective heads, runtime reconfiguration and adaptive transformer structure.",
-    ),
-    SimilarityAnchor(
         label="模型压缩",
         text="Model compression for inference such as quantization, pruning, distillation, low-bit weights and sparsity.",
     ),
