@@ -30,6 +30,7 @@ description: "Use when working in this repository on conference paper filtering,
 - `py -m paper_analysis.cli.main --help`
 - `py -m paper_analysis.cli.main conference --help`
 - `py -m paper_analysis.cli.main arxiv --help`
+- `py -m paper_analysis.cli.main arxiv report --source-mode subscription-api --subscription-date 2026-04/04-10 --deliver-subscription`
 - `py -m paper_analysis.cli.main quality send-test-email`
 - `py -m paper_analysis.cli.main quality lint`
 - `py -m paper_analysis.cli.main quality local-ci`
@@ -41,6 +42,7 @@ description: "Use when working in this repository on conference paper filtering,
 
 - 顶会筛选请求 -> `conference filter` 或 `conference report`
 - arXiv 日更 / 订阅请求 -> `arxiv daily-filter` 或 `arxiv report`
+- arXiv 订阅最小投递闭环请求 -> `arxiv report --source-mode subscription-api --subscription-date YYYY-MM/MM-DD --deliver-subscription`
 - 本地检查 / 回归请求 -> `quality local-ci`
 - 邮件通道调试 / 测试邮件请求 -> `quality send-test-email`
 - 查看最近产物 -> `report --source <conference|arxiv>`
@@ -55,6 +57,7 @@ description: "Use when working in this repository on conference paper filtering,
 
 - 顶会链路优先复用 `conference` 命名空间，不新增 `recommend`
 - arXiv 链路优先复用 `arxiv` 命名空间，不在入口层做新的偏好产品面
+- arXiv 默认先抓取候选，再输出过滤后的推荐结果
 - 质量检查默认运行 `quality local-ci`
 - 邮件通道调试默认复用 `quality send-test-email`，不新增 `email` 顶层命名空间
 - 文本产物与文档统一使用 UTF-8
@@ -87,6 +90,8 @@ arXiv 输入模式：
 - `fixture`：读取本地样例 JSON
 - `subscription-api`：访问 arXiv 官方 API
 - 订阅 API 最小参数：`--source-mode subscription-api --subscription-date YYYY-MM/MM-DD`
+- arXiv 输出默认是过滤后的推荐结果，而不是原始抓取全集
+- 订阅投递闭环最小参数：`arxiv report --source-mode subscription-api --subscription-date YYYY-MM/MM-DD --deliver-subscription`
 
 ## 首读文档
 

@@ -19,35 +19,35 @@ DATE_PATTERN = re.compile(r"(\d{4})-(\d{2})/\d{2}-(\d{2})")
 def load_subscription_papers(
     subscription_date: str,
     categories: list[str] | None = None,
-    max_results: int = 10,
+    max_results: int | None = 10,
     client: ArxivApiClient | None = None,
 ) -> list[Paper]:
     """Fetch a bounded set of papers for a subscription day from arXiv API."""
-    if max_results <= 0:
+    if max_results is not None and max_results <= 0:
         raise CliInputError("--max-results 必须大于 0")
 
     search_query = build_subscription_query(subscription_date, categories)
     api_client = client or ArxivApiClient()
     papers: list[Paper] = []
     start = 0
-    batch_size = min(max_results, 100)
+    batch_size = 100 if max_results is None else min(max_results, 100)
 
-    while len(papers) < max_results:
+    while max_results is None or len(papers) < max_results:
         xml_data = api_client.fetch_feed(
             search_query=search_query,
             start=start,
-            max_results=min(batch_size, max_results - len(papers)),
+            max_results=batch_size if max_results is None else min(batch_size, max_results - len(papers)),
         )
         batch = parse_atom_feed(xml_data)
         if not batch:
             break
         papers.extend(batch)
-        if len(batch) < batch_size or len(papers) >= max_results:
+        if len(batch) < batch_size or (max_results is not None and len(papers) >= max_results):
             break
         start += len(batch)
         api_client.wait_for_next_request()
 
-    return papers[:max_results]
+    return papers if max_results is None else papers[:max_results]
 
 
 def build_subscription_query(

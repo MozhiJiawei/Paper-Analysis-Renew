@@ -89,8 +89,7 @@ class GoldenPathE2ETests(CaseMetadataMixin, unittest.TestCase):
                 "subscription-api",
                 "--subscription-date",
                 "2025-09/09-01",
-                "--max-results",
-                "10",
+                "--fetch-all",
             ],
             cwd=ROOT_DIR,
             capture_output=True,
@@ -119,7 +118,8 @@ class GoldenPathE2ETests(CaseMetadataMixin, unittest.TestCase):
         self.assertTrue(first_paper["paper_id"])
         self.assertTrue(first_paper["title"])
         self.assertTrue(first_paper["published_at"])
-        self.record_step("确认 arXiv 联网结果至少包含一篇结构完整的论文。")
+        self.assertTrue(first_paper["sampled_reason"])
+        self.record_step("确认 arXiv 联网结果至少包含一篇推理加速相关、结构完整的论文。")
 
     def test_ci_html_report_renders_recommendations_from_real_e2e_artifacts(self) -> None:
         """【推荐】本地 CI 页面可以正常展示推荐相关 E2E 结果。"""
@@ -155,8 +155,7 @@ class GoldenPathE2ETests(CaseMetadataMixin, unittest.TestCase):
                 "subscription-api",
                 "--subscription-date",
                 "2025-09/09-01",
-                "--max-results",
-                "10",
+                "--fetch-all",
             ]
         )
         self.record_step("基于真实产物调用 CI HTML writer 生成 local-ci 审核页。")

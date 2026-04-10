@@ -44,6 +44,7 @@ class CodexAgentE2ETests(CaseMetadataMixin, unittest.TestCase):
 
         prompt = (
             "请按这个仓库现有的 arXiv 联网报告链路，为 2025-09/09-01 生成一份报告产物。"
+            "不要只查前 10 条，改成放宽抓取范围，尽量命中推理加速相关论文。"
             "不要修改代码，不要新增临时脚本，不要手工加工中间 JSON。"
             "完成后只回复最终生成的 markdown 报告路径。"
         )
@@ -97,6 +98,10 @@ class CodexAgentE2ETests(CaseMetadataMixin, unittest.TestCase):
             and "paper_analysis.cli.main arxiv report" in str(_event_item(event).get("command", ""))
             and "--source-mode subscription-api" in str(_event_item(event).get("command", ""))
             and "--subscription-date 2025-09/09-01" in str(_event_item(event).get("command", ""))
+            and (
+                "--fetch-all" in str(_event_item(event).get("command", ""))
+                or "--max-results 10" not in str(_event_item(event).get("command", ""))
+            )
             and _event_item(event).get("exit_code") == 0
         ]
         self.record_step(f"检查事件流中是否成功执行联网 arxiv report，命中 {len(arxiv_report_runs)} 次。")

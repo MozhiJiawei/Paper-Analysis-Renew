@@ -20,9 +20,12 @@ py -m paper_analysis.cli.main <namespace> <action> [options]
 - `arxiv daily-filter`
   - 样例模式：`arxiv daily-filter --input <json>`
   - 订阅 API 模式：`arxiv daily-filter --source-mode subscription-api --subscription-date <YYYY-MM/MM-DD> [--category <term>]... [--max-results <int>]`
+  - 默认行为：先抓取候选，再输出过滤后的推荐结果
 - `arxiv report`
   - 样例模式：`arxiv report --input <json>`
   - 订阅 API 模式：`arxiv report --source-mode subscription-api --subscription-date <YYYY-MM/MM-DD> [--category <term>]... [--max-results <int>]`
+  - 默认行为：先抓取候选，再把过滤后的推荐结果写入基础四件套
+  - 订阅投递模式：`arxiv report --source-mode subscription-api --subscription-date <YYYY-MM/MM-DD> [--category <term>]... [--max-results <int>] --deliver-subscription`
 
 ## quality
 
@@ -42,6 +45,7 @@ py -m paper_analysis.cli.main <namespace> <action> [options]
 
 - 顶会筛选类请求 -> `conference filter` / `conference report`
 - arXiv 日更或订阅类请求 -> `arxiv daily-filter` / `arxiv report`
+- arXiv 每日订阅邮件与本地 HTML 闭环 -> `arxiv report --deliver-subscription`
 - 质量检查或回归请求 -> `quality local-ci`
 - 邮件通道调试或测试邮件请求 -> `quality send-test-email`
 - 最近报告查看请求 -> `report --source <conference|arxiv>`
@@ -52,7 +56,8 @@ py -m paper_analysis.cli.main <namespace> <action> [options]
 
 - 业务入口只允许 `conference` 和 `arxiv`
 - “推荐 / 排序”不是独立命名空间
-- arXiv CLI 当前默认展示抓取结果，不在命令入口执行偏好筛选
+- arXiv CLI 当前默认先过滤，再输出或写出推荐结果；“推荐 / 排序”仍是共享内部阶段能力，不是独立命名空间
+- `arxiv report --deliver-subscription` 只支持 `--source-mode subscription-api`，并在保留基础四件套的同时继续归档运行快照、发送邮件并发布本地订阅站点
 - benchmark / annotation / 网页标注能力已迁到 `third_party/paper_analysis_dataset` 子模块，不属于主仓 CLI 命令面
 - benchmark 正式规范文档位于 `third_party/paper_analysis_dataset/docs/benchmarks/`
 

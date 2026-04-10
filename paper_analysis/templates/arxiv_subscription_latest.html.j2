@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>arXiv 订阅最新报告</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --bg: #f7f1e8;
+        --panel: #fffdf8;
+        --ink: #1f1d1a;
+        --muted: #6c655d;
+        --line: #dfd2c0;
+        --accent: #b44b22;
+      }
+      body {
+        margin: 0;
+        font-family: "Microsoft YaHei UI", "PingFang SC", sans-serif;
+        background: radial-gradient(circle at top, #fff6e6, var(--bg) 52%);
+        color: var(--ink);
+      }
+      main {
+        max-width: 960px;
+        margin: 0 auto;
+        padding: 32px 20px 56px;
+      }
+      .hero,
+      .panel,
+      article {
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 18px;
+        box-shadow: 0 12px 32px rgba(49, 34, 18, 0.06);
+      }
+      .hero {
+        padding: 24px;
+        margin-bottom: 20px;
+      }
+      .stats {
+        display: flex;
+        gap: 12px;
+        flex-wrap: wrap;
+        margin-top: 16px;
+      }
+      .stat,
+      .panel {
+        padding: 16px 18px;
+      }
+      .stat strong {
+        display: block;
+        font-size: 24px;
+      }
+      .meta {
+        color: var(--muted);
+        margin: 6px 0;
+      }
+      .panel {
+        margin-bottom: 16px;
+      }
+      .papers {
+        display: grid;
+        gap: 14px;
+      }
+      article {
+        padding: 18px;
+      }
+      article h2 {
+        margin: 0 0 10px;
+        font-size: 20px;
+      }
+      .links a {
+        color: var(--accent);
+        margin-right: 12px;
+      }
+      .empty {
+        font-size: 18px;
+      }
+      code {
+        background: #f3e7d6;
+        border-radius: 8px;
+        padding: 2px 6px;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <section class="hero" data-run-id="{{ snapshot.run_id }}">
+        <p class="meta">run_id: <code>{{ snapshot.run_id }}</code></p>
+        <h1>arXiv 订阅最新报告</h1>
+        <p class="meta">订阅日期：{{ snapshot.subscription_date }} | 运行时间：{{ snapshot.generated_at }}</p>
+        <p class="meta">邮件状态：{{ snapshot.steps.email.status }} | 站点状态：{{ snapshot.steps.site.status }}</p>
+        <div class="stats">
+          <div class="stat">
+            <span>抓取总数</span>
+            <strong>{{ snapshot.fetched_count }}</strong>
+          </div>
+          <div class="stat">
+            <span>推荐命中</span>
+            <strong>{{ snapshot.recommended_count }}</strong>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel">
+        <strong>基础报告目录</strong>
+        <p class="meta">{{ snapshot.latest_report_dir }}</p>
+        <p class="meta">归档目录：{{ snapshot.archive_dir }}</p>
+      </section>
+
+      {% if snapshot.papers %}
+      <section class="papers">
+        {% for paper in snapshot.papers %}
+        <article
+          data-run-id="{{ snapshot.run_id }}"
+          data-paper-id="{{ paper.paper_id }}"
+          data-source="{{ paper.source }}"
+          data-published-at="{{ paper.published_at }}"
+        >
+          <h2>{{ loop.index }}. {{ paper.title }}</h2>
+          <p class="meta">作者：{{ paper.authors or "未知" }}</p>
+          <p class="meta">来源：{{ paper.venue }} | 发布时间：{{ paper.published_at or "未知" }}</p>
+          <p>{{ paper.sampled_reason or "已进入推荐结果" }}</p>
+          {% if paper.abstract %}
+          <p>摘要：{{ paper.abstract }}</p>
+          {% endif %}
+          <p class="links">
+            {% if paper.pdf_url %}<a href="{{ paper.pdf_url }}">PDF</a>{% endif %}
+            {% if paper.project_url %}<a href="{{ paper.project_url }}">Project</a>{% endif %}
+            {% if paper.code_url %}<a href="{{ paper.code_url }}">Code</a>{% endif %}
+            {% if paper.openreview_url %}<a href="{{ paper.openreview_url }}">OpenReview</a>{% endif %}
+          </p>
+        </article>
+        {% endfor %}
+      </section>
+      {% else %}
+      <section class="panel empty">
+        今日无推荐论文，但任务已成功运行。
+      </section>
+      {% endif %}
+    </main>
+  </body>
+</html>

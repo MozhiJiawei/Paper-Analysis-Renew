@@ -56,7 +56,7 @@ def write_report(
         "",
     ]
     stdout_lines = [f"[OK] {source_name} 筛选完成，共 {len(papers)} 篇"]
-    serializable: list[dict[str, object]] = []
+    serializable = serialize_papers(papers)
     csv_rows: list[dict[str, object]] = []
 
     for index, paper in enumerate(papers, start=1):
@@ -80,8 +80,7 @@ def write_report(
         stdout_lines.append(
             f"{index}. {paper.title} | {paper.venue} | {paper.sampled_reason or 'selected'}"
         )
-        row = _serialize_paper(paper)
-        serializable.append(row)
+        row = serializable[index - 1]
         csv_rows.append({column: row.get(column, "") for column in csv_columns})
 
     markdown_path.write_text("\n".join(markdown_lines), encoding="utf-8")
@@ -108,6 +107,11 @@ def write_report(
         "csv": csv_path,
         "stdout": stdout_path,
     }
+
+
+def serialize_papers(papers: list[Paper]) -> list[dict[str, object]]:
+    """Convert paper objects into JSON-safe rows reused by other services."""
+    return [_serialize_paper(paper) for paper in papers]
 
 
 def _serialize_paper(paper: Paper) -> dict[str, object]:

@@ -1,12 +1,12 @@
 [
   {
     "paper_id": "arxiv-001",
-    "title": "Reasoning Agents with Tool Feedback",
-    "abstract": "A daily arXiv sample focused on tool-using agents.",
+    "title": "Speculative Decoding for Efficient LLM Inference",
+    "abstract": "A daily arXiv sample focused on speculative decoding, draft model acceptance rate and inference acceleration.",
     "source": "arxiv",
     "venue": "arXiv",
     "authors": ["Dana", "Evan"],
-    "tags": ["agents", "reasoning", "evaluation"],
+    "tags": ["speculative decoding", "llm", "serving"],
     "organization": "Google DeepMind",
     "published_at": "2026-03-18"
   },

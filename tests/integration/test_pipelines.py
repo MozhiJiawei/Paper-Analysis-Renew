@@ -16,6 +16,35 @@ ROOT_DIR = Path(__file__).resolve().parents[2]
 
 
 class PipelineIntegrationTests(unittest.TestCase):
+    def test_arxiv_help_lists_delivery_mode_flag(self) -> None:
+        """验证 arxiv report 帮助页暴露订阅投递模式开关。"""
+
+        env = os.environ.copy()
+        env["PYTHONUTF8"] = "1"
+        env["PYTHONIOENCODING"] = "utf-8"
+
+        result = subprocess.run(
+            [
+                sys.executable,
+                "-m",
+                "paper_analysis.cli.main",
+                "arxiv",
+                "report",
+                "--help",
+            ],
+            cwd=ROOT_DIR,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            env=env,
+            check=False,
+        )
+
+        self.assertEqual(0, result.returncode)
+        self.assertIn("--deliver-subscription", result.stdout)
+        self.assertIn("HTML", result.stdout)
+
     def test_conference_pipeline_returns_ranked_results(self) -> None:
         """验证 conference pipeline 默认运行时会返回满足最低分阈值的排序结果。"""
 
@@ -27,35 +56,35 @@ class PipelineIntegrationTests(unittest.TestCase):
         """验证 arXiv pipeline 默认运行时会返回抓取结果并按 limit 截断。"""
 
         papers, preferences = ArxivPipeline().run()
-        self.assertEqual(2, len(papers))
+        self.assertEqual(1, len(papers))
         self.assertTrue(all(paper.source == "arxiv" for paper in papers))
         self.assertEqual(10, preferences.limit)
         self.assertEqual("arxiv-001", papers[0].paper_id)
-        self.assertEqual("arxiv-002", papers[1].paper_id)
+        self.assertEqual("解码策略优化", papers[0].sampled_reason)
 
     def test_arxiv_pipeline_loads_subscription_api_source(self) -> None:
-        """验证 arXiv pipeline 切换 subscription-api 后会直接返回抓取结果。"""
+        """验证 arXiv pipeline 切换 subscription-api 后会过滤出推理加速正样本。"""
 
         mocked_papers = [
             Paper(
                 paper_id="2509.00001",
-                title="First Subscription Paper",
-                abstract="Fetched from arXiv API.",
+                title="Speculative Decoding for Long-Context LLM Serving",
+                abstract="Fetched from arXiv API with speculative decoding and draft model acceptance rate.",
                 source="arxiv",
                 venue="arXiv",
                 authors=["Ada"],
-                tags=["cs.AI"],
+                tags=["speculative decoding", "serving"],
                 organization="OpenAI",
                 published_at="2025-09-01",
             ),
             Paper(
                 paper_id="2509.00002",
                 title="Second Subscription Paper",
-                abstract="Also fetched from arXiv API.",
+                abstract="A dataset benchmarking paper.",
                 source="arxiv",
                 venue="arXiv",
                 authors=["Bob"],
-                tags=["cs.LG"],
+                tags=["benchmark"],
                 organization="Bio Lab",
                 published_at="2025-09-01",
             ),
@@ -72,14 +101,34 @@ class PipelineIntegrationTests(unittest.TestCase):
                 max_results=3,
             )
 
-        self.assertEqual(2, len(papers))
+        self.assertEqual(1, len(papers))
         self.assertEqual("2509.00001", papers[0].paper_id)
-        self.assertEqual("2509.00002", papers[1].paper_id)
+        self.assertEqual("解码策略优化", papers[0].sampled_reason)
         self.assertEqual(10, preferences.limit)
         mocked_loader.assert_called_once_with(
             subscription_date="2025-09/09-01",
             categories=["cs.AI"],
             max_results=3,
+        )
+
+    def test_arxiv_pipeline_fetch_all_passes_unbounded_request_to_loader(self) -> None:
+        """验证 fetch-all 模式会对订阅抓取层关闭数量截断。"""
+
+        with patch(
+            "paper_analysis.services.arxiv_pipeline.load_subscription_papers",
+            return_value=[],
+        ) as mocked_loader:
+            papers, _preferences = ArxivPipeline().run(
+                source_mode="subscription-api",
+                subscription_date="2025-09/09-01",
+                fetch_all=True,
+            )
+
+        self.assertEqual([], papers)
+        mocked_loader.assert_called_once_with(
+            subscription_date="2025-09/09-01",
+            categories=None,
+            max_results=None,
         )
 
     def test_arxiv_report_requires_subscription_date_for_api_mode(self) -> None:
@@ -111,6 +160,38 @@ class PipelineIntegrationTests(unittest.TestCase):
         self.assertEqual(1, result.returncode)
         self.assertIn("[FAIL] scope=arxiv.report", result.stdout)
         self.assertIn("--subscription-date", result.stdout)
+        self.assertNotIn("Traceback", result.stdout + result.stderr)
+
+    def test_arxiv_report_rejects_fixture_source_for_delivery_mode(self) -> None:
+        """验证 deliver-subscription 不能在 fixture 模式下继续执行真实投递。"""
+
+        env = os.environ.copy()
+        env["PYTHONUTF8"] = "1"
+        env["PYTHONIOENCODING"] = "utf-8"
+
+        result = subprocess.run(
+            [
+                sys.executable,
+                "-m",
+                "paper_analysis.cli.main",
+                "arxiv",
+                "report",
+                "--deliver-subscription",
+                "--subscription-date",
+                "2026-04/04-10",
+            ],
+            cwd=ROOT_DIR,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            env=env,
+            check=False,
+        )
+
+        self.assertEqual(1, result.returncode)
+        self.assertIn("[FAIL] scope=arxiv.report", result.stdout)
+        self.assertIn("--source-mode subscription-api", result.stdout)
         self.assertNotIn("Traceback", result.stdout + result.stderr)
 
     def test_conference_pipeline_reads_paperlists_fixture(self) -> None:

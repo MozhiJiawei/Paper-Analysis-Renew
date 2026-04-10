@@ -20,6 +20,7 @@ py -m paper_analysis.cli.main --help
 py -m paper_analysis.cli.main conference report
 py -m paper_analysis.cli.main conference report --venue iclr --year 2025
 py -m paper_analysis.cli.main arxiv report
+py -m paper_analysis.cli.main arxiv report --source-mode subscription-api --subscription-date 2026-04/04-10 --deliver-subscription
 py -m paper_analysis.cli.main quality send-test-email
 py -m paper_analysis.cli.main quality local-ci
 py -m paper_analysis.api.evaluation_server --port 8765
@@ -39,6 +40,7 @@ py -m paper_analysis.api.evaluation_server --port 8765
 
 - “帮我筛 ICLR 2025 论文” -> `conference filter` 或 `conference report`
 - “帮我看今天的 arXiv AI 更新” -> `arxiv daily-filter` 或 `arxiv report`
+- “把今天的 arXiv 订阅结果发邮件并更新本地页面” -> `arxiv report --source-mode subscription-api --subscription-date <YYYY-MM/MM-DD> --deliver-subscription`
 - “帮我试一下 QQ SMTP 发信” -> `quality send-test-email`
 - “跑一下本地检查” -> `quality local-ci`
 - “看最近一次顶会报告” -> `report --source conference`
@@ -76,6 +78,23 @@ py -m paper_analysis.cli.main quality send-test-email
 artifacts/email/send-test-latest/
 ```
 
+## arXiv 订阅最小投递闭环
+
+先准备和测试邮件相同的 SMTP 环境变量，然后执行：
+
+```powershell
+py -m paper_analysis.cli.main arxiv report --source-mode subscription-api --subscription-date 2026-04/04-10 --deliver-subscription
+```
+
+首次闭环成功后，关键产物位于：
+
+```text
+artifacts/e2e/arxiv/latest/
+artifacts/subscriptions/arxiv/runs/<run_id>/
+artifacts/subscriptions/arxiv/site/latest.html
+artifacts/subscriptions/arxiv/site/index.html
+```
+
 ## paperlists 子模块
 
 顶会真实数据源来自 `third_party/paperlists` 子模块。首次使用前先初始化：
@@ -103,4 +122,5 @@ py -m paper_analysis.cli.main conference report --venue iclr --year 2025 --paper
 - UTF-8 优先
 - CLI 优先
 - “推荐”不是独立产品面
-- arXiv subscription-api 默认展示抓取到的前 10 条结果
+- arXiv 默认先抓取候选，再输出过滤后的推荐结果
+- `--deliver-subscription` 只允许在 `subscription-api` 模式下执行真实投递
