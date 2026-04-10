@@ -1,3 +1,5 @@
+"""Structured helpers for persisting quality and unittest case results."""
+
 from __future__ import annotations
 
 import json
@@ -5,7 +7,6 @@ import os
 import unittest
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
-from typing import Any
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
@@ -43,14 +44,14 @@ LINT_CASE_METADATA: dict[str, dict[str, str]] = {
     },
     "ruff": {
         "title": "Ruff Python 静态检查",
-        "description": "检查 Python 文件的通用静态问题，例如未使用导入、重复定义与 import 风格。",
+        "description": "按目录扫描主仓 Python 代码，尽可能开启规则来暴露风格、正确性与可维护性问题。",
         "failure_check": "命令退出码非 0 时判定失败。",
         "source_label": "ruff",
-        "script_path": "py -m ruff check .",
+        "script_path": "py -m ruff check paper_analysis tests scripts",
     },
     "mypy": {
         "title": "Mypy 类型检查",
-        "description": "在首批核心结构化模块上执行真实类型检查，避免只检查注解存在性的假安全感。",
+        "description": "按目录覆盖主仓 Python 代码，尽可能扩大真实类型检查范围并直接暴露类型问题。",
         "failure_check": "命令退出码非 0 时判定失败。",
         "source_label": "mypy",
         "script_path": "py -m mypy --config-file pyproject.toml",
@@ -67,6 +68,8 @@ LINT_CASE_METADATA: dict[str, dict[str, str]] = {
 
 @dataclass(slots=True)
 class QualityCaseResult:
+    """Serializable view model for one quality stage or unittest case."""
+
     stage_name: str
     case_id: str
     title: str
@@ -81,10 +84,12 @@ class QualityCaseResult:
 
     @property
     def category_key(self) -> str:
+        """Return the top-level HTML category key for this case."""
         return STAGE_TO_CATEGORY.get(self.stage_name, "unit_tests")
 
 
 def write_case_results(path: Path, cases: list[QualityCaseResult]) -> Path:
+    """Write structured case results to a stable UTF-8 JSON artifact."""
     path.parent.mkdir(parents=True, exist_ok=True)
     payload = {"cases": [asdict(case) for case in cases]}
     path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -92,6 +97,7 @@ def write_case_results(path: Path, cases: list[QualityCaseResult]) -> Path:
 
 
 def load_case_results(path: Path) -> list[QualityCaseResult]:
+    """Load case results from disk and coerce unexpected fields safely."""
     if not path.exists():
         return []
     payload = json.loads(path.read_text(encoding="utf-8"))
@@ -126,6 +132,7 @@ def build_stage_case_result(
     output: str,
     artifact_path: str,
 ) -> QualityCaseResult:
+    """Build a generic stage-level case record for non-unittest stages."""
     process_log = [
         f"执行阶段：{stage_name}",
         f"摘要：{summary}",
@@ -155,6 +162,7 @@ def build_lint_case_result(
     artifact_paths: list[str] | None = None,
     extra_process_logs: list[str] | None = None,
 ) -> QualityCaseResult:
+    """Build one lint subcheck case result from static metadata and output."""
     metadata = LINT_CASE_METADATA[case_key]
     process_log = [
         "执行阶段：lint",
@@ -186,6 +194,7 @@ def discover_skipped_test_cases(
     top_level_dir: Path,
     reason: str,
 ) -> list[QualityCaseResult]:
+    """Discover test cases for a skipped stage and mark each one as skipped."""
     discover_start_dir = str(start_dir)
     if start_dir.is_absolute() and top_level_dir.is_absolute():
         discover_start_dir = str(start_dir.relative_to(top_level_dir))
@@ -213,18 +222,16 @@ def discover_skipped_test_cases(
         ]
     finally:
         os.chdir(previous_cwd)
-    cases: list[QualityCaseResult] = []
-    for test in iter_test_cases(suite):
-        cases.append(
-            build_test_case_result(
-                stage_name=stage_name,
-                test=test,
-                status="skipped",
-                result_log=reason,
-                default_process_log=[reason],
-            )
+    return [
+        build_test_case_result(
+            stage_name=stage_name,
+            test=test,
+            status="skipped",
+            result_log=reason,
+            default_process_log=[reason],
         )
-    return cases
+        for test in iter_test_cases(suite)
+    ]
 
 
 def build_test_case_result(
@@ -235,6 +242,7 @@ def build_test_case_result(
     result_log: str,
     default_process_log: list[str] | None = None,
 ) -> QualityCaseResult:
+    """Build a case result from one discovered unittest case instance."""
     case_id = test.id()
     short_description = test.shortDescription()
     description = short_description or f"执行 {case_id}，验证该测试场景符合预期。"
@@ -268,6 +276,7 @@ def build_test_case_result(
 
 
 def iter_test_cases(suite: unittest.TestSuite) -> list[unittest.TestCase]:
+    """Flatten a nested unittest suite into an ordered list of test cases."""
     cases: list[unittest.TestCase] = []
     for item in suite:
         if isinstance(item, unittest.TestSuite):
@@ -289,7 +298,7 @@ def _case_title(test: unittest.TestCase, *, short_description: str | None = None
     return f"验证 {humanized} 场景"
 
 
-def _coerce_string_list(value: Any) -> list[str]:
+def _coerce_string_list(value: object) -> list[str]:
     if not isinstance(value, list):
         return []
     return [str(item) for item in value if str(item).strip()]

@@ -1,10 +1,11 @@
+"""Executor for running multiple evaluation routes within one scaffold run."""
+
 from __future__ import annotations
 
+import json
 from collections import Counter
 from collections.abc import Callable
-import json
-from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING
 
 from paper_analysis.api.evaluation_protocol import EvaluationPaper
 from paper_analysis.evaluation.ab_protocol import (
@@ -15,13 +16,21 @@ from paper_analysis.evaluation.ab_protocol import (
 )
 from paper_analysis.evaluation.ab_reporter import write_run_summary
 from paper_analysis.evaluation.errors import RouteContractError, RouteNotImplementedError
-from paper_analysis.evaluation.route_registry import RouteRegistry
+
+if TYPE_CHECKING:
+    from pathlib import Path
+
+    from paper_analysis.evaluation.route_registry import RouteRegistry
+    from paper_analysis.evaluation.routes.base import BaseBinaryRoute
 
 
 MetricsBuilder = Callable[[str, list[EvaluationPaper], list[BinaryRoutePrediction]], dict[str, object]]
+ROUTE_EXECUTION_ERRORS = (RouteContractError, RuntimeError, TypeError, ValueError)
 
 
 class ABRunner:
+    """Run a selected set of routes and persist per-route artifacts."""
+
     def __init__(
         self,
         *,
@@ -29,6 +38,7 @@ class ABRunner:
         output_root: Path,
         metrics_builder: MetricsBuilder | None = None,
     ) -> None:
+        """Initialize one scaffold runner with output and metric dependencies."""
         self._registry = registry
         self._output_root = output_root
         self._metrics_builder = metrics_builder
@@ -40,6 +50,7 @@ class ABRunner:
         run_id: str,
         enabled_route_names: list[str] | None = None,
     ) -> ABRunResult:
+        """Execute all enabled routes and write scaffold-level artifacts."""
         output_dir = self._output_root / run_id
         routes_dir = output_dir / "routes"
         routes_dir.mkdir(parents=True, exist_ok=True)
@@ -99,10 +110,11 @@ class ABRunner:
     def _execute_route(
         self,
         *,
-        route: Any,
+        route: BaseBinaryRoute,
         route_dir: Path,
         papers: list[EvaluationPaper],
     ) -> RouteRunResult:
+        """Execute one route and normalize its outcome into a route result."""
         try:
             route.prepare()
             predictions = route.predict_many(papers)
@@ -134,7 +146,7 @@ class ABRunner:
                     reason=str(exc),
                 ),
             )
-        except Exception as exc:
+        except ROUTE_EXECUTION_ERRORS as exc:
             result = RouteRunResult(
                 manifest=RouteManifestEntry(
                     route_name=route.route_name,
@@ -154,6 +166,7 @@ class ABRunner:
         papers: list[EvaluationPaper],
         predictions: list[BinaryRoutePrediction],
     ) -> None:
+        """Validate that route outputs preserve count and ordering contracts."""
         if len(predictions) != len(papers):
             raise RouteContractError(
                 f"{route_name} 返回的预测条数与输入论文数不一致。"
@@ -169,6 +182,7 @@ class ABRunner:
         papers: list[EvaluationPaper],
         predictions: list[BinaryRoutePrediction],
     ) -> dict[str, object]:
+        """Build optional metrics for a route execution."""
         if self._metrics_builder is None:
             return {"prediction_count": len(predictions)}
         return self._metrics_builder(route_name, papers, predictions)
@@ -179,6 +193,7 @@ class ABRunner:
         route_dir: Path,
         result: RouteRunResult,
     ) -> RouteRunResult:
+        """Persist per-route status, prediction, and metric artifacts."""
         status_path = route_dir / "status.json"
         predictions_path = route_dir / "predictions.jsonl"
         metrics_path = route_dir / "metrics.json"
@@ -205,6 +220,7 @@ class ABRunner:
         return result
 
     def _count_statuses(self, routes: list[RouteRunResult]) -> dict[str, int]:
+        """Count route outcomes by execution status."""
         counter = Counter(route.manifest.execution_status for route in routes)
         return {
             "ready": counter.get("ready", 0),

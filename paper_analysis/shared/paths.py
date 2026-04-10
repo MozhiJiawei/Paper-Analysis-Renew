@@ -1,7 +1,8 @@
+"""Repository-wide path constants used by artifacts and fixtures."""
+
 from __future__ import annotations
 
 from pathlib import Path
-
 
 ROOT_DIR = Path(__file__).resolve().parents[2]
 ARTIFACTS_DIR = ROOT_DIR / "artifacts"

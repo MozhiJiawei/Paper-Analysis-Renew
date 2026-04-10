@@ -1,3 +1,5 @@
+"""Minimal arXiv API client with fixed HTTPS endpoint and rate limiting."""
+
 from __future__ import annotations
 
 import ssl
@@ -29,11 +31,13 @@ class ArxivApiClient:
         timeout_seconds: float = 30.0,
         request_interval_seconds: float = REQUEST_INTERVAL_SECONDS,
     ) -> None:
+        """Store request metadata and timeout settings for later API calls."""
         self.user_agent = user_agent
         self.timeout_seconds = timeout_seconds
         self.request_interval_seconds = request_interval_seconds
 
     def fetch_feed(self, search_query: str, start: int, max_results: int) -> bytes:
+        """Fetch one Atom feed page from arXiv using the official query endpoint."""
         params = urllib.parse.urlencode(
             {
                 "search_query": search_query,
@@ -43,17 +47,17 @@ class ArxivApiClient:
                 "sortOrder": "ascending",
             }
         )
-        request = urllib.request.Request(
+        request = urllib.request.Request(  # noqa: S310 - fixed HTTPS endpoint is defined in this module
             f"{API_URL}?{params}",
             headers={"User-Agent": self.user_agent},
         )
         try:
-            with urllib.request.urlopen(
+            with urllib.request.urlopen(  # noqa: S310 - request targets the fixed official arXiv API
                 request,
                 timeout=self.timeout_seconds,
                 context=SSL_CONTEXT,
             ) as response:
-                return response.read()
+                return bytes(response.read())
         except urllib.error.HTTPError as exc:
             raise CliInputError(f"arXiv API 请求失败，HTTP {exc.code}") from exc
         except urllib.error.URLError as exc:
@@ -64,4 +68,5 @@ class ArxivApiClient:
             raise CliInputError(f"访问 arXiv API 失败：{exc}") from exc
 
     def wait_for_next_request(self) -> None:
+        """Sleep long enough to respect the arXiv API request interval."""
         time.sleep(self.request_interval_seconds)

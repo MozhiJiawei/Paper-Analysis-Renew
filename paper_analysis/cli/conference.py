@@ -1,16 +1,21 @@
+"""CLI commands for the conference filtering and report workflow."""
+
 from __future__ import annotations
 
-from argparse import ArgumentParser, Namespace
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING
 
-from paper_analysis.cli.common import CliInputError, print_cli_error
+from paper_analysis.cli.common import CliInputError, emit_lines, print_cli_error
 from paper_analysis.services.conference_pipeline import ConferencePipeline
 from paper_analysis.services.report_writer import write_report
 from paper_analysis.shared.paths import ARTIFACTS_DIR
 
+if TYPE_CHECKING:
+    import argparse
 
-def register(subparsers: Any) -> None:
+
+def register(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
+    """Register the conference CLI namespace and its stable subcommands."""
     parser = subparsers.add_parser("conference", help="顶会论文筛选工作流")
     conference_subparsers = parser.add_subparsers(dest="conference_action", required=True)
 
@@ -29,7 +34,7 @@ def register(subparsers: Any) -> None:
     report_parser.set_defaults(handler=handle_report)
 
 
-def _add_common_arguments(parser: ArgumentParser) -> None:
+def _add_common_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--input", type=Path, help="样例论文 JSON 路径")
     parser.add_argument("--preferences", type=Path, help="偏好配置 JSON 路径")
     parser.add_argument("--venue", help="paperlists 会议名称，例如 iclr、neurips、cvpr")
@@ -42,7 +47,8 @@ def _add_common_arguments(parser: ArgumentParser) -> None:
     parser.add_argument("--seed", type=int, default=42, help="paperlists 抽样随机种子")
 
 
-def handle_filter(args: Namespace) -> int:
+def handle_filter(args: argparse.Namespace) -> int:
+    """Run conference filtering and print a compact terminal summary."""
     try:
         result = ConferencePipeline().run(
             args.input,
@@ -60,25 +66,26 @@ def handle_filter(args: Namespace) -> int:
         )
 
     if not result.papers:
-        print("[OK] 未找到符合条件的顶会论文。")
+        emit_lines("[OK] 未找到符合条件的顶会论文。")
         return 0
 
     if result.source_mode == "paperlists":
-        print(
+        emit_lines(
             f"[OK] 顶会筛选完成，会议={result.venue} {result.year}，"
             f"已录用候选 {result.candidate_count} 篇，输出 {result.selected_count} 篇，seed={result.seed}"
         )
         for index, paper in enumerate(result.papers, start=1):
-            print(f"{index}. {paper.title} | {paper.venue} | {paper.sampled_reason}")
+            emit_lines(f"{index}. {paper.title} | {paper.venue} | {paper.sampled_reason}")
         return 0
 
-    print(f"[OK] 顶会筛选完成，共 {len(result.papers)} 篇：")
+    emit_lines(f"[OK] 顶会筛选完成，共 {len(result.papers)} 篇：")
     for index, paper in enumerate(result.papers, start=1):
-        print(f"{index}. {paper.title} | score={paper.score} | org={paper.organization}")
+        emit_lines(f"{index}. {paper.title} | score={paper.score} | org={paper.organization}")
     return 0
 
 
-def handle_report(args: Namespace) -> int:
+def handle_report(args: argparse.Namespace) -> int:
+    """Run conference filtering and write report artifacts."""
     try:
         result = ConferencePipeline().run(
             args.input,
@@ -107,5 +114,5 @@ def handle_report(args: Namespace) -> int:
         papers=result.papers,
         command_name=command_name,
     )
-    print(f"[OK] 顶会报告已生成：{artifacts['markdown']}")
+    emit_lines(f"[OK] 顶会报告已生成：{artifacts['markdown']}")
     return 0

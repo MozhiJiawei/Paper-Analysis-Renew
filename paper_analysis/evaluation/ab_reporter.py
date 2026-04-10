@@ -1,12 +1,18 @@
+"""Summary and leaderboard writers for evaluation scaffold runs."""
+
 from __future__ import annotations
 
 import json
-from pathlib import Path
+from typing import TYPE_CHECKING
 
-from paper_analysis.evaluation.ab_protocol import ABRunResult, RouteRunResult
+if TYPE_CHECKING:
+    from pathlib import Path
+
+    from paper_analysis.evaluation.ab_protocol import ABRunResult, RouteRunResult
 
 
 def write_run_summary(output_dir: Path, result: ABRunResult) -> tuple[Path, Path]:
+    """Write markdown and leaderboard artifacts for one scaffold run."""
     summary_path = output_dir / "summary.md"
     leaderboard_path = output_dir / "leaderboard.json"
     summary_path.write_text(_build_summary_markdown(result), encoding="utf-8")
@@ -42,7 +48,7 @@ def _build_summary_markdown(result: ABRunResult) -> str:
 
 
 def _build_leaderboard_payload(routes: list[RouteRunResult]) -> dict[str, object]:
-    leaderboard = []
+    leaderboard: list[dict[str, object]] = []
     for route in routes:
         manifest = route.manifest
         score = 1.0 if manifest.execution_status == "ready" else 0.0
@@ -56,5 +62,12 @@ def _build_leaderboard_payload(routes: list[RouteRunResult]) -> dict[str, object
                 "metrics": route.metrics,
             }
         )
-    leaderboard.sort(key=lambda item: (-float(item["score"]), str(item["route_name"])))
+    leaderboard.sort(key=lambda item: (-_score_value(item), str(item["route_name"])))
     return {"routes": leaderboard}
+
+
+def _score_value(item: dict[str, object]) -> float:
+    score = item.get("score")
+    if isinstance(score, (int, float)):
+        return float(score)
+    return 0.0

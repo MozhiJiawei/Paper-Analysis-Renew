@@ -1,9 +1,24 @@
+"""Heuristic predictor for the evaluation API baseline."""
+
 from __future__ import annotations
 
 import re
 from dataclasses import dataclass
 
 from paper_analysis.api.evaluation_protocol import EvaluationPaper, EvaluationPrediction
+
+MAX_EVIDENCE_SPANS = 2
+PRIMARY_RESEARCH_OBJECT_RULES: tuple[tuple[str, tuple[str, ...]], ...] = (
+    ("多模态 / VLM", ("multimodal", "vision-language", "vlm", "mllm", "llava", "video token", "visual token")),
+    ("Diffusion / 生成模型", ("diffusion", "denoising", "stable diffusion", "u-net", "dit")),
+    ("强化学习 / 序列决策", ("reinforcement learning", "rl", "sequence decision", "policy optimization")),
+    ("检索 / 推荐 / 搜索", ("retrieval", "recommendation", "recommender", "search engine", "ranking")),
+    ("计算机视觉", ("computer vision", "image classification", "object detection", "segmentation")),
+    ("语音 / 音频", ("speech", "audio", "asr", "tts", "speaker")),
+    ("评测 / Benchmark / 数据集", ("benchmark", "dataset", "survey", "empirical study")),
+    ("AI 系统 / 基础设施", ("serving platform", "system infrastructure", "resource manager", "runtime system")),
+    ("LLM", ("llm", "large language model", "language model", "transformer", "moe", "reasoning model")),
+)
 
 
 def _contains_any(text: str, keywords: tuple[str, ...]) -> bool:
@@ -21,7 +36,7 @@ def _extract_evidence(source_texts: list[str], keywords: tuple[str, ...]) -> lis
             sentence = _extract_sentence(text, keyword_lower)
             if sentence and sentence not in evidence:
                 evidence.append(sentence)
-            if len(evidence) >= 2:
+            if len(evidence) >= MAX_EVIDENCE_SPANS:
                 return evidence
     return evidence
 
@@ -36,9 +51,12 @@ def _extract_sentence(text: str, keyword_lower: str) -> str:
 
 @dataclass(slots=True)
 class EvaluationPredictor:
+    """Predicts a single-label preference result from paper metadata."""
+
     algorithm_version: str = "heuristic-v1"
 
     def predict(self, paper: EvaluationPaper) -> EvaluationPrediction:
+        """Build a heuristic prediction from a paper title, abstract, and keywords."""
         texts = [paper.title, paper.abstract, paper.abstract_zh, " ".join(paper.keywords or [])]
         normalized = " \n".join(texts).lower()
         source_texts = [item for item in texts if item.strip()]
@@ -79,60 +97,9 @@ class EvaluationPredictor:
         )
 
     def _predict_primary_research_object(self, text: str) -> str:
-        if _contains_any(
-            text,
-            (
-                "multimodal",
-                "vision-language",
-                "vlm",
-                "mllm",
-                "llava",
-                "video token",
-                "visual token",
-            ),
-        ):
-            return "多模态 / VLM"
-        if _contains_any(
-            text,
-            ("diffusion", "denoising", "stable diffusion", "u-net", "dit"),
-        ):
-            return "Diffusion / 生成模型"
-        if _contains_any(
-            text,
-            ("reinforcement learning", "rl", "sequence decision", "policy optimization"),
-        ):
-            return "强化学习 / 序列决策"
-        if _contains_any(
-            text,
-            ("retrieval", "recommendation", "recommender", "search engine", "ranking"),
-        ):
-            return "检索 / 推荐 / 搜索"
-        if _contains_any(
-            text,
-            ("computer vision", "image classification", "object detection", "segmentation"),
-        ):
-            return "计算机视觉"
-        if _contains_any(text, ("speech", "audio", "asr", "tts", "speaker")):
-            return "语音 / 音频"
-        if _contains_any(text, ("benchmark", "dataset", "survey", "empirical study")):
-            return "评测 / Benchmark / 数据集"
-        if _contains_any(
-            text,
-            ("serving platform", "system infrastructure", "resource manager", "runtime system"),
-        ):
-            return "AI 系统 / 基础设施"
-        if _contains_any(
-            text,
-            (
-                "llm",
-                "large language model",
-                "language model",
-                "transformer",
-                "moe",
-                "reasoning model",
-            ),
-        ):
-            return "LLM"
+        for label, keywords in PRIMARY_RESEARCH_OBJECT_RULES:
+            if _contains_any(text, keywords):
+                return label
         return "通用机器学习"
 
     def _predict_preference_label(self, text: str) -> tuple[str | None, tuple[str, ...]]:

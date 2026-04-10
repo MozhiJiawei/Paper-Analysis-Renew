@@ -1,13 +1,19 @@
+"""JSON sample loaders shared by CLI entrypoints and integration tests."""
+
 from __future__ import annotations
 
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 from paper_analysis.cli.common import CliInputError, read_json_file
 from paper_analysis.domain.paper import Paper
 from paper_analysis.domain.preference import PreferenceProfile
 
+if TYPE_CHECKING:
+    from pathlib import Path
+
 
 def load_papers(path: Path) -> list[Paper]:
+    """Load fixture papers from JSON and validate the item shape."""
     raw_items = read_json_file(path)
     if not isinstance(raw_items, list):
         raise CliInputError(f"论文输入必须是 JSON 数组：{path}")
@@ -24,6 +30,7 @@ def load_papers(path: Path) -> list[Paper]:
 
 
 def load_preferences(path: Path) -> PreferenceProfile:
+    """Load one preference profile from JSON and validate the payload shape."""
     raw = read_json_file(path)
     if not isinstance(raw, dict):
         raise CliInputError(f"偏好输入必须是 JSON 对象：{path}")

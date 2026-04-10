@@ -1,11 +1,15 @@
+"""Resolve supported conference/year targets inside the paperlists checkout."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 from paper_analysis.cli.common import CliInputError
 from paper_analysis.shared.paths import ROOT_DIR
 
+if TYPE_CHECKING:
+    from pathlib import Path
 
 PAPERLISTS_ROOT = ROOT_DIR / "third_party" / "paperlists"
 
@@ -36,6 +40,8 @@ VENUE_DISPLAY_NAMES = {
 
 @dataclass(slots=True)
 class PaperlistsTarget:
+    """Resolved conference/year location inside the paperlists repository."""
+
     venue_key: str
     venue_name: str
     year: int
@@ -48,6 +54,7 @@ def resolve_paperlists_target(
     year: int,
     root: Path | None = None,
 ) -> PaperlistsTarget:
+    """Validate a venue/year pair and resolve the backing paperlists JSON path."""
     normalized_venue = VENUE_ALIASES.get(venue.strip().lower())
     if normalized_venue is None:
         supported = ", ".join(sorted(VENUE_ALIASES))

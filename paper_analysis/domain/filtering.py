@@ -1,12 +1,16 @@
+"""Shared paper ranking helper used by filtering pipelines."""
+
 from __future__ import annotations
 
-from paper_analysis.domain.paper import Paper
-from paper_analysis.domain.preference import PreferenceProfile
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from paper_analysis.domain.paper import Paper
+    from paper_analysis.domain.preference import PreferenceProfile
 
 
 def rank_papers(candidates: list[Paper], preferences: PreferenceProfile) -> list[Paper]:
     """Score papers with a shared preference model."""
-
     ranked: list[Paper] = []
     preferred_topics = {topic.lower() for topic in preferences.preferred_topics}
     preferred_subtopics = {topic.lower() for topic in preferences.preferred_subtopics}

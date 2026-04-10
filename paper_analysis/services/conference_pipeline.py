@@ -1,12 +1,14 @@
+"""Conference paper filtering pipeline backed by fixtures or paperlists data."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
-from pathlib import Path
+from typing import TYPE_CHECKING
 
-from paper_analysis.domain.paper import Paper
-from paper_analysis.domain.preference import PreferenceProfile
 from paper_analysis.services.conference_sampler import sample_papers
 from paper_analysis.services.preference_ranker import PreferenceRanker
+from paper_analysis.shared.paths import FIXTURES_DIR
+from paper_analysis.shared.sample_loader import load_papers, load_preferences
 from paper_analysis.sources.conference.paperlists_loader import (
     PAPERLISTS_ROOT,
     resolve_paperlists_target,
@@ -16,12 +18,18 @@ from paper_analysis.sources.conference.paperlists_parser import (
     load_raw_records,
     normalize_records,
 )
-from paper_analysis.shared.paths import FIXTURES_DIR
-from paper_analysis.shared.sample_loader import load_papers, load_preferences
+
+if TYPE_CHECKING:
+    from pathlib import Path
+
+    from paper_analysis.domain.paper import Paper
+    from paper_analysis.domain.preference import PreferenceProfile
 
 
 @dataclass(slots=True)
 class ConferencePipelineResult:
+    """Structured output for one conference pipeline execution."""
+
     papers: list[Paper]
     preferences: PreferenceProfile
     source_mode: str
@@ -37,6 +45,7 @@ class ConferencePipeline:
     """Conference paper filtering pipeline."""
 
     def __init__(self, ranker: PreferenceRanker | None = None) -> None:
+        """Initialize the pipeline with an optional ranking service override."""
         self.ranker = ranker or PreferenceRanker()
 
     def run(
@@ -49,6 +58,7 @@ class ConferencePipeline:
         paperlists_root: Path | None = None,
         seed: int = 42,
     ) -> ConferencePipelineResult:
+        """Load conference papers, rank or sample them, and return execution metadata."""
         preferences = load_preferences(
             preferences_path or FIXTURES_DIR / "preferences" / "sample_preferences.json"
         )

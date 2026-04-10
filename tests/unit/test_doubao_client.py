@@ -68,6 +68,8 @@ class DoubaoClientUnitTests(unittest.TestCase):
             DoubaoUsage(prompt_tokens=10, total_tokens=12),
             DoubaoUsage(prompt_tokens=5, total_tokens=6),
         )
+        self.assertIsNotNone(merged)
+        assert merged is not None
         self.assertEqual(15, merged.prompt_tokens)
         self.assertEqual(18, merged.total_tokens)
 

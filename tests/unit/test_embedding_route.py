@@ -10,6 +10,7 @@ from paper_analysis.evaluation.routes.embedding_retriever_stub import (
     POSITIVE_ANCHORS,
     _paper_to_embedding_text,
 )
+from paper_analysis.utils.doubao_client import DoubaoEmbeddingResponse
 
 
 class FakeDoubaoClient:
@@ -27,9 +28,10 @@ class FakeDoubaoClient:
         texts: list[str],
         *,
         model: str | None = None,
-    ):
-        if model != self.resolved_embedding_model:
-            return _FakeEmbeddingResponse(False, [], model or "", "unexpected model")
+    ) -> DoubaoEmbeddingResponse:
+        resolved_model = model or self.resolved_embedding_model or ""
+        if resolved_model != (self.resolved_embedding_model or ""):
+            return DoubaoEmbeddingResponse(False, [], resolved_model, "unexpected model")
 
         vectors: list[list[float]] = []
         for text in texts:
@@ -46,22 +48,8 @@ class FakeDoubaoClient:
             if text in NEGATIVE_ANCHORS:
                 vectors.append([-1.0, 0.0])
                 continue
-            return _FakeEmbeddingResponse(False, [], model, f"unexpected text: {text}")
-        return _FakeEmbeddingResponse(True, vectors, model)
-
-
-class _FakeEmbeddingResponse:
-    def __init__(
-        self,
-        success: bool,
-        vectors: list[list[float]],
-        model: str,
-        error: str | None = None,
-    ) -> None:
-        self.success = success
-        self.vectors = vectors
-        self.model = model
-        self.error = error
+            return DoubaoEmbeddingResponse(False, [], resolved_model, f"unexpected text: {text}")
+        return DoubaoEmbeddingResponse(True, vectors, resolved_model)
 
 
 def _paper(
@@ -69,7 +57,7 @@ def _paper(
     paper_id: str,
     title: str,
     abstract: str,
-        keywords: list[str] | None = None,
+    keywords: list[str] | None = None,
 ) -> EvaluationPaper:
     return EvaluationPaper(
         paper_id=paper_id,

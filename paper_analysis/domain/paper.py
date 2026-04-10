@@ -1,3 +1,5 @@
+"""Canonical paper record used across repository workflows."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field

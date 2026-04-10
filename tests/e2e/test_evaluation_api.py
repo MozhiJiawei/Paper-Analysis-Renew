@@ -8,6 +8,7 @@ import sys
 import time
 import unittest
 from pathlib import Path
+from typing import cast
 from urllib import request
 
 from paper_analysis.testing.case_metadata import CaseMetadataMixin
@@ -38,7 +39,7 @@ class EvaluationApiE2ETests(CaseMetadataMixin, unittest.TestCase):
         artifact_dir.mkdir(parents=True, exist_ok=True)
         try:
             fixture_path = ROOT_DIR / "tests" / "fixtures" / "evaluation" / "annotate_request.json"
-            payload = json.loads(fixture_path.read_text(encoding="utf-8"))
+            payload = _decode_json_object(fixture_path.read_text(encoding="utf-8"))
             self.record_step("向本地评测服务发送真实 annotate 请求。")
             response = self._post_json(port, payload)
             request_path = artifact_dir / "request.json"
@@ -55,12 +56,15 @@ class EvaluationApiE2ETests(CaseMetadataMixin, unittest.TestCase):
             self.add_case_artifact(str(request_path))
             self.add_case_artifact(str(response_path))
             self.record_step("检查响应 schema、单标签协议以及脱敏边界。")
-            self.assertEqual(1, len(response["responses"]))
-            item = response["responses"][0]
+            responses = cast(list[dict[str, object]], response["responses"])
+            self.assertEqual(1, len(responses))
+            item = responses[0]
+            model_info = cast(dict[str, object], item["model_info"])
+            prediction = cast(dict[str, object], item["prediction"])
             self.assertEqual("req-e2e-001", item["request_id"])
-            self.assertEqual("e2e-test-v1", item["model_info"]["algorithm_version"])
-            self.assertEqual("positive", item["prediction"]["negative_tier"])
-            self.assertEqual(1, len(item["prediction"]["preference_labels"]))
+            self.assertEqual("e2e-test-v1", model_info["algorithm_version"])
+            self.assertEqual("positive", prediction["negative_tier"])
+            self.assertEqual(1, len(cast(list[object], prediction["preference_labels"])))
             self.assertNotIn("expected_label", json.dumps(response, ensure_ascii=False))
             self.assertNotIn("split", json.dumps(response, ensure_ascii=False))
         finally:
@@ -136,13 +140,15 @@ class EvaluationApiE2ETests(CaseMetadataMixin, unittest.TestCase):
             self.assertTrue(report_json.exists())
             self.assertTrue(summary_md.exists())
             self.assertTrue(stdout_txt.exists())
-            payload = json.loads(report_json.read_text(encoding="utf-8"))
+            payload = _decode_json_object(report_json.read_text(encoding="utf-8"))
             summary = summary_md.read_text(encoding="utf-8")
             serialized = json.dumps(payload, ensure_ascii=False) + "\n" + summary
             self.record_step("检查报告产物只包含聚合指标，不泄露 paper_id、标题、摘要或 source_path。")
-            self.assertEqual(55, payload["counts"]["evaluated_count"])
-            self.assertEqual(0, payload["counts"]["request_error_count"])
-            self.assertEqual(0, payload["counts"]["protocol_error_count"])
+            counts = cast(dict[str, object], payload["counts"])
+            overall = cast(dict[str, object], payload["overall"])
+            self.assertEqual(55, counts["evaluated_count"])
+            self.assertEqual(0, counts["request_error_count"])
+            self.assertEqual(0, counts["protocol_error_count"])
             for metric_name in (
                 "macro_precision",
                 "macro_recall",
@@ -151,7 +157,7 @@ class EvaluationApiE2ETests(CaseMetadataMixin, unittest.TestCase):
                 "micro_recall",
                 "micro_f1",
             ):
-                self.assertIn(metric_name, payload["overall"])
+                self.assertIn(metric_name, overall)
             self.assertIn("precision / recall / f1", summary)
             self.assertIn(algorithm_version, service_metadata_path.read_text(encoding="utf-8"))
             self.assertNotIn("paper_id", serialized)
@@ -214,7 +220,11 @@ class EvaluationApiE2ETests(CaseMetadataMixin, unittest.TestCase):
             method="POST",
         )
         with request.urlopen(http_request, timeout=5) as response:
-            return json.loads(response.read().decode("utf-8"))
+            return _decode_json_object(response.read().decode("utf-8"))
+
+
+def _decode_json_object(content: str) -> dict[str, object]:
+    return cast(dict[str, object], json.loads(content))
 
 
 if __name__ == "__main__":

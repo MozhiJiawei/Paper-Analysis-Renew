@@ -1,11 +1,16 @@
+"""Subscription-day paper loader backed by the official arXiv API."""
+
 from __future__ import annotations
 
 import re
+from typing import TYPE_CHECKING
 
 from paper_analysis.cli.common import CliInputError
-from paper_analysis.domain.paper import Paper
 from paper_analysis.sources.arxiv.api_client import ArxivApiClient
 from paper_analysis.sources.arxiv.atom_parser import parse_atom_feed
+
+if TYPE_CHECKING:
+    from paper_analysis.domain.paper import Paper
 
 DEFAULT_CATEGORIES = ["cs.AI", "cs.CL", "cs.CV", "cs.DC", "cs.MA"]
 DATE_PATTERN = re.compile(r"(\d{4})-(\d{2})/\d{2}-(\d{2})")
@@ -18,7 +23,6 @@ def load_subscription_papers(
     client: ArxivApiClient | None = None,
 ) -> list[Paper]:
     """Fetch a bounded set of papers for a subscription day from arXiv API."""
-
     if max_results <= 0:
         raise CliInputError("--max-results 必须大于 0")
 
@@ -50,6 +54,7 @@ def build_subscription_query(
     subscription_date: str,
     categories: list[str] | None = None,
 ) -> str:
+    """Build the arXiv query string for one subscription day and category set."""
     start_date, end_date = _date_range(subscription_date)
     selected_categories = categories or DEFAULT_CATEGORIES
     category_query = " OR ".join(f"cat:{category}" for category in selected_categories)

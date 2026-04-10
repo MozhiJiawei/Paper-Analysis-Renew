@@ -1,14 +1,21 @@
+"""Normalize raw paperlists JSON rows into shared paper domain objects."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 from paper_analysis.cli.common import CliInputError, read_json_file
 from paper_analysis.domain.paper import Paper
 
+if TYPE_CHECKING:
+    from pathlib import Path
+
 
 @dataclass(slots=True)
 class PaperlistsRawRecord:
+    """Raw conference record plus source metadata needed for normalization."""
+
     payload: dict[str, object]
     venue: str
     year: int
@@ -16,6 +23,7 @@ class PaperlistsRawRecord:
 
 
 def load_raw_records(source_path: Path, venue: str, year: int) -> list[PaperlistsRawRecord]:
+    """Load raw paperlists entries and attach venue/year source metadata."""
     raw = read_json_file(source_path)
     if not isinstance(raw, list):
         raise CliInputError(f"paperlists 输入必须是 JSON 数组：{source_path}")
@@ -36,14 +44,17 @@ def load_raw_records(source_path: Path, venue: str, year: int) -> list[Paperlist
 
 
 def filter_accepted_records(records: list[PaperlistsRawRecord]) -> list[PaperlistsRawRecord]:
+    """Keep only accepted paperlists records based on the status field."""
     return [record for record in records if is_accepted_record(record.payload)]
 
 
 def normalize_records(records: list[PaperlistsRawRecord]) -> list[Paper]:
+    """Normalize a batch of raw paperlists rows into shared paper objects."""
     return [normalize_record(record) for record in records]
 
 
 def normalize_record(record: PaperlistsRawRecord) -> Paper:
+    """Normalize one paperlists row into the shared paper schema."""
     payload = record.payload
     title = _read_string(payload, "title")
     paper_id = _read_string(payload, "id") or _slugify(title)
@@ -82,6 +93,7 @@ def normalize_record(record: PaperlistsRawRecord) -> Paper:
 
 
 def is_accepted_record(payload: dict[str, object]) -> bool:
+    """Heuristically classify whether a paperlists row represents acceptance."""
     status = _read_string(payload, "status")
     if not status:
         return True

@@ -1,10 +1,15 @@
+"""Report artifact writer for filtered paper results."""
+
 from __future__ import annotations
 
 import csv
 import json
-from pathlib import Path
+from typing import TYPE_CHECKING
 
-from paper_analysis.domain.paper import Paper
+if TYPE_CHECKING:
+    from pathlib import Path
+
+    from paper_analysis.domain.paper import Paper
 
 
 def write_report(
@@ -14,7 +19,6 @@ def write_report(
     command_name: str,
 ) -> dict[str, Path]:
     """Persist stdout, markdown, json and csv artifacts with stable filenames."""
-
     report_dir.mkdir(parents=True, exist_ok=True)
     markdown_path = report_dir / "summary.md"
     json_path = report_dir / "result.json"
@@ -107,6 +111,7 @@ def write_report(
 
 
 def _serialize_paper(paper: Paper) -> dict[str, object]:
+    """Convert one paper object into a JSON-serializable report row."""
     return {
         "paper_id": paper.paper_id,
         "title": paper.title,
@@ -135,4 +140,5 @@ def _serialize_paper(paper: Paper) -> dict[str, object]:
 
 
 def _join_values(values: list[str]) -> str:
+    """Join non-empty string values with a stable report delimiter."""
     return " | ".join(value for value in values if value)

@@ -1,13 +1,19 @@
+"""arXiv paper loading pipeline for fixture and subscription-api modes."""
+
 from __future__ import annotations
 
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 from paper_analysis.cli.common import CliInputError
-from paper_analysis.domain.paper import Paper
-from paper_analysis.domain.preference import PreferenceProfile
 from paper_analysis.shared.paths import FIXTURES_DIR
 from paper_analysis.shared.sample_loader import load_papers, load_preferences
 from paper_analysis.sources.arxiv.subscription_loader import load_subscription_papers
+
+if TYPE_CHECKING:
+    from pathlib import Path
+
+    from paper_analysis.domain.paper import Paper
+    from paper_analysis.domain.preference import PreferenceProfile
 
 
 class ArxivPipeline:
@@ -23,6 +29,7 @@ class ArxivPipeline:
         categories: list[str] | None = None,
         max_results: int = 10,
     ) -> tuple[list[Paper], PreferenceProfile]:
+        """Load papers and preferences, then cap the result count by user limit."""
         if source_mode == "subscription-api":
             if not subscription_date:
                 raise CliInputError("subscription-api 模式必须提供 --subscription-date")

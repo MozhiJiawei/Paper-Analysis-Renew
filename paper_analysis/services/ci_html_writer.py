@@ -1,3 +1,5 @@
+"""HTML report writer for local CI stage summaries and artifact previews."""
+
 from __future__ import annotations
 
 import json
@@ -5,7 +7,6 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from jinja2 import Environment, FileSystemLoader
-
 from paper_analysis.services.quality_case_support import (
     CATEGORY_LABELS,
     QualityCaseResult,
@@ -45,6 +46,8 @@ STATUS_PRIORITY: dict[str, int] = {
 
 @dataclass(slots=True)
 class QualityStageResult:
+    """Structured stage result rendered into the CI HTML dashboard."""
+
     stage_name: str
     status: str
     summary: str
@@ -53,11 +56,14 @@ class QualityStageResult:
 
     @property
     def description(self) -> str:
+        """Return the human-readable description configured for the stage."""
         return STAGE_DESCRIPTIONS.get(self.stage_name, "未配置说明。")
 
 
 @dataclass(slots=True)
 class E2EReportSection:
+    """E2E report payload consumed by the HTML template."""
+
     source: str
     status: str
     summary_markdown: str
@@ -69,6 +75,7 @@ class E2EReportSection:
 
     @property
     def status_label(self) -> str:
+        """Return the localized label for the current section status."""
         return STATUS_LABELS[self.status]
 
 
@@ -77,6 +84,7 @@ def write_ci_html_report(
     stage_results: list[QualityStageResult],
     artifacts_dir: Path,
 ) -> Path:
+    """Render the local CI HTML report from stage results and stored artifacts."""
     report_path.parent.mkdir(parents=True, exist_ok=True)
     case_categories = _build_case_categories(stage_results, artifacts_dir)
     overall_status = "passed" if all(item.status == "passed" for item in stage_results) else "failed"

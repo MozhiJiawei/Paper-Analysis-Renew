@@ -1,12 +1,14 @@
+"""Stable CLI entrypoint for repository quality checks."""
+
 from __future__ import annotations
 
 import os
 import subprocess
 import sys
-from argparse import Namespace
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING
 
+from paper_analysis.cli.common import emit_lines
 from paper_analysis.services.ci_html_writer import QualityStageResult, write_ci_html_report
 from paper_analysis.services.quality_case_support import (
     build_lint_case_result,
@@ -16,6 +18,9 @@ from paper_analysis.services.quality_case_support import (
 )
 from paper_analysis.shared.encoding import build_utf8_subprocess_env
 from paper_analysis.shared.paths import ARTIFACTS_DIR, ROOT_DIR
+
+if TYPE_CHECKING:
+    import argparse
 
 SCRIPT_ROOT = Path(__file__).resolve().parents[2]
 LINT_STAGE_NAME = "lint"
@@ -32,27 +37,7 @@ QUALITY_STAGES: list[str] = [LINT_STAGE_NAME, "unit", "integration", "e2e"]
 
 
 STAGE_COMMAND_OVERRIDES: dict[str, list[str]] = {}
-RUFF_TARGETS = [
-    "paper_analysis/cli/quality.py",
-    "paper_analysis/services/quality_case_support.py",
-    "paper_analysis/services/ci_html_writer.py",
-    "paper_analysis/domain/paper.py",
-    "paper_analysis/domain/preference.py",
-    "paper_analysis/api/evaluation_protocol.py",
-    "paper_analysis/api/evaluation_predictor.py",
-    "paper_analysis/api/evaluation_server.py",
-    "paper_analysis/sources/arxiv/api_client.py",
-    "paper_analysis/sources/arxiv/atom_parser.py",
-    "paper_analysis/sources/arxiv/subscription_loader.py",
-    "paper_analysis/services/report_writer.py",
-    "scripts/quality/lint.py",
-    "scripts/quality/quality_report.py",
-    "scripts/quality/run_unittest_stage.py",
-    "tests/unit/test_lint.py",
-    "tests/unit/test_ci_html_writer.py",
-    "tests/integration/test_quality_html.py",
-    "tests/integration/test_cli_help.py",
-]
+RUFF_TARGETS = ["paper_analysis", "tests", "scripts"]
 
 
 LINT_SUBCHECKS: list[tuple[str, list[str]]] = [
@@ -66,7 +51,8 @@ LINT_SUBCHECKS: list[tuple[str, list[str]]] = [
 LINT_BLOCKING_SUBCHECKS = {"repo_rules", "ruff", "mypy"}
 
 
-def register(subparsers: Any) -> None:
+def register(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
+    """Register the quality namespace and its stage subcommands."""
     parser = subparsers.add_parser("quality", help="本地质量门禁")
     quality_subparsers = parser.add_subparsers(dest="quality_action", required=True)
 
@@ -81,7 +67,8 @@ def register(subparsers: Any) -> None:
         stage_parser.set_defaults(handler=handle_single_stage, stage_name=stage_name)
 
 
-def handle_local_ci(_args: Namespace) -> int:
+def handle_local_ci(_args: argparse.Namespace) -> int:
+    """Run lint, unit, integration, and e2e stages in order."""
     stage_results: list[QualityStageResult] = []
     for stage_name in _quality_stage_names():
         exit_code, stage_result = _run_quality_stage(stage_name)
@@ -93,11 +80,12 @@ def handle_local_ci(_args: Namespace) -> int:
             return exit_code
 
     _write_local_ci_html(stage_results)
-    print("[OK] quality local-ci 全部通过。")
+    emit_lines("[OK] quality local-ci 全部通过。")
     return 0
 
 
-def handle_single_stage(args: Namespace) -> int:
+def handle_single_stage(args: argparse.Namespace) -> int:
+    """Run a single quality stage."""
     exit_code, _stage_result = _run_quality_stage(args.stage_name)
     return exit_code
 
@@ -116,10 +104,9 @@ def _run_lint_stage() -> tuple[int, QualityStageResult]:
     case_results = []
     combined_sections: list[str] = []
     warning_detected = False
-    blocking_exit_code = 0
-    blocking_failure_summary = ""
+    blocking_failures: list[tuple[str, int, str]] = []
 
-    for index, (case_key, command) in enumerate(LINT_SUBCHECKS):
+    for case_key, command in LINT_SUBCHECKS:
         output, return_code, artifact_path = _run_subprocess_to_artifact(
             command=command,
             artifact_path=artifacts_dir / f"lint-{case_key}-latest.txt",
@@ -147,36 +134,27 @@ def _run_lint_stage() -> tuple[int, QualityStageResult]:
         combined_sections.append(f"## {case_key}\n{output.strip() or '无输出。'}")
 
         if status == "failed":
-            blocking_exit_code = return_code or 1
-            blocking_failure_summary = summary
-            for skipped_key, _skipped_command in LINT_SUBCHECKS[index + 1 :]:
-                case_results.append(
-                    build_lint_case_result(
-                        case_key=skipped_key,
-                        status="skipped",
-                        summary="前置子检查失败，本子检查未执行",
-                        output="前置子检查失败，本子检查未执行。",
-                        artifact_paths=[str(combined_artifact_path.relative_to(ROOT_DIR))],
-                    )
-                )
-                combined_sections.append(f"## {skipped_key}\n前置子检查失败，本子检查未执行。")
-            break
+            blocking_failures.append((case_key, return_code or 1, summary))
 
     combined_output = "\n\n".join(combined_sections).strip() + "\n"
     combined_artifact_path.write_text(combined_output, encoding="utf-8")
     write_case_results(_case_artifact_path(LINT_STAGE_NAME), case_results)
 
-    if blocking_exit_code != 0:
-        print("[FAIL] stage=lint")
-        print(f"summary: {blocking_failure_summary or 'lint 阶段失败'}")
-        print("next: run `py -m paper_analysis.cli.main quality lint`")
-        print(f"artifact: {combined_artifact_path.relative_to(ROOT_DIR)}")
+    if blocking_failures:
+        failed_case_keys = ", ".join(case_key for case_key, _return_code, _summary in blocking_failures)
+        blocking_failure_summary = f"失败子检查: {failed_case_keys}"
+        emit_lines(
+            "[FAIL] stage=lint",
+            f"summary: {blocking_failure_summary}",
+            "next: run `py -m paper_analysis.cli.main quality lint`",
+            f"artifact: {combined_artifact_path.relative_to(ROOT_DIR)}",
+        )
         return (
-            blocking_exit_code,
+            blocking_failures[0][1],
             QualityStageResult(
                 stage_name=LINT_STAGE_NAME,
                 status="failed",
-                summary=blocking_failure_summary or "lint 阶段失败",
+                summary=blocking_failure_summary,
                 artifact_path=str(combined_artifact_path.relative_to(ROOT_DIR)),
                 output=combined_output,
             ),
@@ -185,9 +163,9 @@ def _run_lint_stage() -> tuple[int, QualityStageResult]:
     summary = "仓库规范、Ruff 与 Mypy 通过"
     if warning_detected:
         summary += "；存在代码质量治理告警（不阻断）"
-    print("[OK] stage=lint")
+    emit_lines("[OK] stage=lint")
     if warning_detected:
-        print("note: 发现代码质量治理告警，但不影响 lint 退出码。")
+        emit_lines("note: 发现代码质量治理告警，但不影响 lint 退出码。")
     return (
         0,
         QualityStageResult(
@@ -207,7 +185,7 @@ def _run_simple_stage(stage_name: str, command: list[str]) -> tuple[int, Quality
     )
 
     if return_code == 0:
-        print(f"[OK] stage={stage_name}")
+        emit_lines(f"[OK] stage={stage_name}")
         stage_result = QualityStageResult(
             stage_name=stage_name,
             status="passed",
@@ -219,10 +197,12 @@ def _run_simple_stage(stage_name: str, command: list[str]) -> tuple[int, Quality
         return 0, stage_result
 
     summary = first_non_empty_line(output) or "阶段执行失败"
-    print(f"[FAIL] stage={stage_name}")
-    print(f"summary: {summary}")
-    print(f"next: run `py -m paper_analysis.cli.main quality {stage_name}`")
-    print(f"artifact: {artifact_path.relative_to(ROOT_DIR)}")
+    emit_lines(
+        f"[FAIL] stage={stage_name}",
+        f"summary: {summary}",
+        f"next: run `py -m paper_analysis.cli.main quality {stage_name}`",
+        f"artifact: {artifact_path.relative_to(ROOT_DIR)}",
+    )
     stage_result = QualityStageResult(
         stage_name=stage_name,
         status="failed",
@@ -236,7 +216,7 @@ def _run_simple_stage(stage_name: str, command: list[str]) -> tuple[int, Quality
 
 def _run_subprocess_to_artifact(*, command: list[str], artifact_path: Path) -> tuple[str, int, Path]:
     artifact_path.parent.mkdir(parents=True, exist_ok=True)
-    result = subprocess.run(
+    result = subprocess.run(  # noqa: S603 - 受控质量命令仅来自仓库内置阶段配置
         command,
         cwd=ROOT_DIR,
         capture_output=True,
@@ -252,10 +232,12 @@ def _run_subprocess_to_artifact(*, command: list[str], artifact_path: Path) -> t
 
 
 def build_subprocess_env() -> dict[str, str]:
+    """Build a UTF-8-safe environment for nested subprocess calls."""
     return build_utf8_subprocess_env(os.environ.copy())
 
 
 def first_non_empty_line(content: str) -> str:
+    """Return the first non-empty line from a captured command output."""
     for line in content.splitlines():
         stripped = line.strip()
         if stripped:
@@ -264,19 +246,17 @@ def first_non_empty_line(content: str) -> str:
 
 
 def _build_skipped_stage_results(failed_stage_name: str) -> list[QualityStageResult]:
-    skipped_results: list[QualityStageResult] = []
     failed_index = _quality_stage_names().index(failed_stage_name)
-    for stage_name in _quality_stage_names()[failed_index + 1 :]:
-        skipped_results.append(
-            QualityStageResult(
-                stage_name=stage_name,
-                status="skipped",
-                summary="前置阶段失败，本阶段未执行",
-                artifact_path=f"artifacts/quality/{stage_name}-latest.txt",
-                output="",
-            )
+    return [
+        QualityStageResult(
+            stage_name=stage_name,
+            status="skipped",
+            summary="前置阶段失败，本阶段未执行",
+            artifact_path=f"artifacts/quality/{stage_name}-latest.txt",
+            output="",
         )
-    return skipped_results
+        for stage_name in _quality_stage_names()[failed_index + 1 :]
+    ]
 
 
 def _write_local_ci_html(stage_results: list[QualityStageResult]) -> None:

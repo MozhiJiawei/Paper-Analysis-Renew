@@ -1,3 +1,5 @@
+"""Custom exceptions for evaluation scaffold route execution."""
+
 from __future__ import annotations
 
 

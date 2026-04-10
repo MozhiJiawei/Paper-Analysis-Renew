@@ -1,11 +1,13 @@
+"""HTTP server exposing the evaluation predictor over a batched API."""
+
 from __future__ import annotations
 
 import json
+import sys
 from argparse import ArgumentParser
 from concurrent.futures import ThreadPoolExecutor
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from typing import Any
 
 from paper_analysis.api.evaluation_predictor import EvaluationPredictor
 from paper_analysis.api.evaluation_protocol import (
@@ -18,11 +20,14 @@ from paper_analysis.shared.encoding import configure_utf8_stdio
 
 
 class EvaluationRequestHandler(BaseHTTPRequestHandler):
+    """Serve health and batch annotation requests for the evaluation API."""
+
     predictor = EvaluationPredictor()
     server_version = "PaperAnalysisEvaluationAPI/1.0"
     error_content_type = "application/json; charset=utf-8"
 
-    def do_GET(self) -> None:  # noqa: N802
+    def do_GET(self) -> None:
+        """Handle health-check requests."""
         if self.path != "/healthz":
             self._write_json(
                 HTTPStatus.NOT_FOUND,
@@ -31,7 +36,8 @@ class EvaluationRequestHandler(BaseHTTPRequestHandler):
             return
         self._write_json(HTTPStatus.OK, {"status": "ok"})
 
-    def do_POST(self) -> None:  # noqa: N802
+    def do_POST(self) -> None:
+        """Handle batched annotation requests."""
         if self.path != "/v1/evaluation/annotate":
             self._write_json(
                 HTTPStatus.NOT_FOUND,
@@ -57,7 +63,8 @@ class EvaluationRequestHandler(BaseHTTPRequestHandler):
             return
         self._write_json(HTTPStatus.OK, response.to_dict())
 
-    def log_message(self, format: str, *args: Any) -> None:
+    def log_message(self, _message_format: str, *_args: object) -> None:
+        """Silence the default HTTP access log for cleaner test output."""
         return
 
     def _read_json_body(self) -> object:
@@ -95,6 +102,7 @@ class EvaluationRequestHandler(BaseHTTPRequestHandler):
 
 
 def build_parser() -> ArgumentParser:
+    """Build the command-line parser for the evaluation API server."""
     parser = ArgumentParser(
         prog="paper-analysis-evaluation-api",
         description="本地论文评测标签服务，只提供只读 HTTP API。",
@@ -110,13 +118,14 @@ def build_parser() -> ArgumentParser:
 
 
 def main() -> None:
+    """Start the threaded evaluation API server."""
     configure_utf8_stdio()
     args = build_parser().parse_args()
     EvaluationRequestHandler.predictor = EvaluationPredictor(
         algorithm_version=args.algorithm_version
     )
     server = ThreadingHTTPServer((args.host, args.port), EvaluationRequestHandler)
-    print(
+    sys.stdout.write(
         json.dumps(
             {
                 "status": "serving",
@@ -126,6 +135,7 @@ def main() -> None:
             },
             ensure_ascii=False,
         )
+        + "\n"
     )
     try:
         server.serve_forever()

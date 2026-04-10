@@ -1,18 +1,24 @@
+"""CLI commands for the arXiv fetch and report workflow."""
+
 from __future__ import annotations
 
-from argparse import ArgumentParser, Namespace
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING
 
-from paper_analysis.cli.common import CliInputError, print_cli_error
-from paper_analysis.domain.paper import Paper
-from paper_analysis.domain.preference import PreferenceProfile
+from paper_analysis.cli.common import CliInputError, emit_lines, print_cli_error
 from paper_analysis.services.arxiv_pipeline import ArxivPipeline
 from paper_analysis.services.report_writer import write_report
 from paper_analysis.shared.paths import ARTIFACTS_DIR
 
+if TYPE_CHECKING:
+    import argparse
 
-def register(subparsers: Any) -> None:
+    from paper_analysis.domain.paper import Paper
+    from paper_analysis.domain.preference import PreferenceProfile
+
+
+def register(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
+    """Register the arXiv CLI namespace and its stable subcommands."""
     parser = subparsers.add_parser("arxiv", help="arXiv 日更与订阅筛选工作流")
     arxiv_subparsers = parser.add_subparsers(dest="arxiv_action", required=True)
 
@@ -31,7 +37,7 @@ def register(subparsers: Any) -> None:
     report_parser.set_defaults(handler=handle_report)
 
 
-def _add_common_arguments(parser: ArgumentParser) -> None:
+def _add_common_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--input", type=Path, help="样例论文 JSON 路径")
     parser.add_argument("--preferences", type=Path, help="偏好配置 JSON 路径")
     parser.add_argument(
@@ -58,7 +64,8 @@ def _add_common_arguments(parser: ArgumentParser) -> None:
     )
 
 
-def handle_daily_filter(args: Namespace) -> int:
+def handle_daily_filter(args: argparse.Namespace) -> int:
+    """Run the arXiv fetch flow and print a compact terminal summary."""
     try:
         papers, _preferences = _run_pipeline(args)
     except CliInputError as exc:
@@ -69,16 +76,17 @@ def handle_daily_filter(args: Namespace) -> int:
         )
 
     if not papers:
-        print("[OK] 本次 arXiv 拉取没有返回论文。")
+        emit_lines("[OK] 本次 arXiv 拉取没有返回论文。")
         return 0
 
-    print(f"[OK] arXiv 拉取完成，共 {len(papers)} 篇：")
+    emit_lines(f"[OK] arXiv 拉取完成，共 {len(papers)} 篇：")
     for index, paper in enumerate(papers, start=1):
-        print(f"{index}. {paper.title} | {paper.venue} | {paper.published_at}")
+        emit_lines(f"{index}. {paper.title} | {paper.venue} | {paper.published_at}")
     return 0
 
 
-def handle_report(args: Namespace) -> int:
+def handle_report(args: argparse.Namespace) -> int:
+    """Run the arXiv report flow and write report artifacts."""
     try:
         papers, _preferences = _run_pipeline(args)
     except CliInputError as exc:
@@ -95,11 +103,11 @@ def handle_report(args: Namespace) -> int:
         papers=papers,
         command_name=_build_command_name(args),
     )
-    print(f"[OK] arXiv 报告已生成：{artifacts['markdown']}")
+    emit_lines(f"[OK] arXiv 报告已生成：{artifacts['markdown']}")
     return 0
 
 
-def _run_pipeline(args: Namespace) -> tuple[list[Paper], PreferenceProfile]:
+def _run_pipeline(args: argparse.Namespace) -> tuple[list[Paper], PreferenceProfile]:
     try:
         return ArxivPipeline().run(
             args.input,
@@ -113,7 +121,7 @@ def _run_pipeline(args: Namespace) -> tuple[list[Paper], PreferenceProfile]:
         raise CliInputError(str(exc)) from exc
 
 
-def _build_command_name(args: Namespace) -> str:
+def _build_command_name(args: argparse.Namespace) -> str:
     if args.source_mode != "subscription-api":
         return "arxiv report"
 
@@ -123,6 +131,5 @@ def _build_command_name(args: Namespace) -> str:
         f"--subscription-date {args.subscription_date}",
         f"--max-results {args.max_results}",
     ]
-    for category in args.category:
-        parts.append(f"--category {category}")
+    parts.extend(f"--category {category}" for category in args.category)
     return " ".join(parts)

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import unittest
+from typing import cast
 
 from paper_analysis.api.evaluation_protocol import EvaluationPrediction
 from paper_analysis.evaluation.ab_protocol import (
@@ -36,9 +37,10 @@ class ABProtocolUnitTests(unittest.TestCase):
         )
 
         payload = prediction.to_dict()
+        prediction_payload = cast(dict[str, object], payload["prediction"])
 
         self.assertEqual("paper-1", payload["paper_id"])
-        self.assertEqual("positive", payload["prediction"]["negative_tier"])
+        self.assertEqual("positive", prediction_payload["negative_tier"])
 
 
 if __name__ == "__main__":

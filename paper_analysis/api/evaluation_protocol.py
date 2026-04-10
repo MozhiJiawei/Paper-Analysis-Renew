@@ -1,3 +1,5 @@
+"""Public request and response schema for the evaluation API."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -84,6 +86,7 @@ def validate_annotation_fields(
     negative_tier: str,
     evidence_spans: dict[str, list[str]],
 ) -> None:
+    """Validate that a prediction payload stays within the public label contract."""
     if primary_research_object not in RESEARCH_OBJECT_LABELS:
         raise EvaluationProtocolError(
             f"primary_research_object 非法：{primary_research_object}"
@@ -106,6 +109,8 @@ def validate_annotation_fields(
 
 @dataclass(slots=True)
 class EvaluationPaper:
+    """Normalized paper payload accepted by the evaluation API."""
+
     paper_id: str
     title: str
     abstract: str
@@ -118,6 +123,7 @@ class EvaluationPaper:
     keywords: list[str] | None = None
 
     def __post_init__(self) -> None:
+        """Normalize raw field values after dataclass construction."""
         self.paper_id = _as_text("paper.paper_id", self.paper_id)
         self.title = _as_text("paper.title", self.title)
         self.abstract = _as_text("paper.abstract", self.abstract)
@@ -131,6 +137,7 @@ class EvaluationPaper:
 
     @classmethod
     def from_dict(cls, payload: object) -> EvaluationPaper:
+        """Construct a paper object from an untyped JSON payload."""
         if not isinstance(payload, dict):
             raise EvaluationProtocolError("paper 必须是对象")
         return cls(
@@ -147,6 +154,7 @@ class EvaluationPaper:
         )
 
     def to_dict(self) -> dict[str, object]:
+        """Serialize the paper into the public response shape."""
         return {
             "paper_id": self.paper_id,
             "title": self.title,
@@ -163,14 +171,18 @@ class EvaluationPaper:
 
 @dataclass(slots=True)
 class EvaluationRequest:
+    """Single evaluation request carrying one paper payload."""
+
     request_id: str
     paper: EvaluationPaper
 
     def __post_init__(self) -> None:
+        """Normalize request metadata after dataclass construction."""
         self.request_id = _as_text("request_id", self.request_id)
 
     @classmethod
     def from_dict(cls, payload: object) -> EvaluationRequest:
+        """Construct a request object from an untyped JSON payload."""
         if not isinstance(payload, dict):
             raise EvaluationProtocolError("请求体必须是 JSON 对象")
         return cls(
@@ -181,14 +193,18 @@ class EvaluationRequest:
 
 @dataclass(slots=True)
 class EvaluationBatchRequest:
+    """Batch request wrapper for multiple evaluation calls."""
+
     requests: list[EvaluationRequest]
 
     def __post_init__(self) -> None:
+        """Ensure the batch contains at least one request."""
         if not self.requests:
             raise EvaluationProtocolError("requests 必须是非空数组")
 
     @classmethod
     def from_dict(cls, payload: object) -> EvaluationBatchRequest:
+        """Construct a batch request from an untyped JSON payload."""
         if not isinstance(payload, dict):
             raise EvaluationProtocolError("请求体必须是 JSON 对象")
         raw_requests = payload.get("requests")
@@ -201,6 +217,8 @@ class EvaluationBatchRequest:
 
 @dataclass(slots=True)
 class EvaluationPrediction:
+    """Validated prediction payload returned by the evaluation API."""
+
     primary_research_object: str
     preference_labels: list[str]
     negative_tier: str
@@ -208,6 +226,7 @@ class EvaluationPrediction:
     notes: str = ""
 
     def __post_init__(self) -> None:
+        """Normalize and validate prediction fields after construction."""
         self.primary_research_object = _as_text(
             "prediction.primary_research_object",
             self.primary_research_object,
@@ -230,6 +249,7 @@ class EvaluationPrediction:
         )
 
     def to_dict(self) -> dict[str, object]:
+        """Serialize the prediction into the public response shape."""
         return {
             "primary_research_object": self.primary_research_object,
             "preference_labels": self.preference_labels,
@@ -241,15 +261,19 @@ class EvaluationPrediction:
 
 @dataclass(slots=True)
 class EvaluationResponse:
+    """Single evaluation response item with prediction metadata."""
+
     request_id: str
     prediction: EvaluationPrediction
     algorithm_version: str
 
     def __post_init__(self) -> None:
+        """Normalize response metadata after dataclass construction."""
         self.request_id = _as_text("request_id", self.request_id)
         self.algorithm_version = _as_text("algorithm_version", self.algorithm_version)
 
     def to_dict(self) -> dict[str, object]:
+        """Serialize the response into the batched API format."""
         return {
             "request_id": self.request_id,
             "prediction": self.prediction.to_dict(),
@@ -259,11 +283,15 @@ class EvaluationResponse:
 
 @dataclass(slots=True)
 class EvaluationBatchResponse:
+    """Batch response wrapper returned by the evaluation API."""
+
     responses: list[EvaluationResponse]
 
     def __post_init__(self) -> None:
+        """Ensure the batch contains at least one response item."""
         if not self.responses:
             raise EvaluationProtocolError("responses 必须是非空数组")
 
     def to_dict(self) -> dict[str, object]:
+        """Serialize the batch response into the public API shape."""
         return {"responses": [item.to_dict() for item in self.responses]}

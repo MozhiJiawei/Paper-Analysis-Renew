@@ -7,6 +7,7 @@ import sys
 import time
 import unittest
 from pathlib import Path
+from typing import cast
 from urllib import error, request
 
 
@@ -31,8 +32,9 @@ class EvaluationApiIntegrationTests(unittest.TestCase):
                 {"requests": [{"request_id": "bad-1", "paper": {"paper_id": "only-id"}}]},
                 expect_error=True,
             )
-            self.assertEqual("invalid_request", response["error"]["code"])
-            self.assertIn("paper.title", response["error"]["message"])
+            error_payload = _get_object(response, "error")
+            self.assertEqual("invalid_request", error_payload["code"])
+            self.assertIn("paper.title", str(error_payload["message"]))
         finally:
             self._stop_server(process)
 
@@ -95,13 +97,21 @@ class EvaluationApiIntegrationTests(unittest.TestCase):
         )
         try:
             with request.urlopen(http_request, timeout=5) as response:
-                return json.loads(response.read().decode("utf-8"))
+                return _decode_json_object(response.read().decode("utf-8"))
         except error.HTTPError as exc:
             if not expect_error:
                 raise
             body = exc.read().decode("utf-8")
             exc.close()
-            return json.loads(body)
+            return _decode_json_object(body)
+
+
+def _decode_json_object(content: str) -> dict[str, object]:
+    return cast(dict[str, object], json.loads(content))
+
+
+def _get_object(payload: dict[str, object], key: str) -> dict[str, object]:
+    return cast(dict[str, object], payload[key])
 
 
 if __name__ == "__main__":

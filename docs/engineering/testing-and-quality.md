@@ -7,7 +7,8 @@
 - `unittest` 负责 unit、integration、e2e 测试
 - `lint` 阶段统一执行仓库规范检查、`ruff`、`mypy` 与代码质量治理报告
 - 仓库规范检查只负责 UTF-8、常见乱码片段，以及非 Python 文本文件的空白字符卫生规则
-- `ruff` 负责 Python 通用静态质量，`mypy` 负责首批核心结构化模块的真实类型检查
+- `ruff` 默认扫描主仓 Python 目录（含 `paper_analysis/`、`tests/`、`scripts/`），尽可能开启规则来暴露问题
+- `mypy` 默认覆盖主仓 Python 目录（含 `paper_analysis/`、`tests/`、`scripts/`），优先扩大真实类型检查范围，再结合误报率按目录收口
 - 代码质量治理报告默认只告警，不阻断 `quality lint`
 - `Jinja2` 负责静态 HTML 审核页渲染
 

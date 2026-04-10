@@ -6,6 +6,7 @@ import sys
 import traceback
 import unittest
 from pathlib import Path
+from typing import Any, cast
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(REPO_ROOT) not in sys.path:
@@ -21,7 +22,7 @@ from paper_analysis.services.quality_case_support import (
 class CaseCollectingTextResult(unittest.TextTestResult):
     def __init__(
         self,
-        stream,
+        stream: Any,
         descriptions: bool,
         verbosity: int,
         *,
@@ -42,25 +43,33 @@ class CaseCollectingTextResult(unittest.TextTestResult):
             )
         )
 
-    def addFailure(self, test: unittest.TestCase, err) -> None:
+    def addFailure(
+        self,
+        test: unittest.TestCase,
+        err: Any,
+    ) -> None:
         super().addFailure(test, err)
         self.case_results.append(
             build_test_case_result(
                 stage_name=self.stage_name,
                 test=test,
                 status="failed",
-                result_log=self._exc_info_to_string(err, test),
+                result_log=_format_error(err),
             )
         )
 
-    def addError(self, test: unittest.TestCase, err) -> None:
+    def addError(
+        self,
+        test: unittest.TestCase,
+        err: Any,
+    ) -> None:
         super().addError(test, err)
         self.case_results.append(
             build_test_case_result(
                 stage_name=self.stage_name,
                 test=test,
                 status="failed",
-                result_log=self._exc_info_to_string(err, test),
+                result_log=_format_error(err),
             )
         )
 
@@ -112,7 +121,7 @@ def main() -> int:
         finally:
             os.chdir(previous_cwd)
         runner = CaseCollectingTextRunner(stage_name=args.stage)
-        result = runner.run(suite)
+        result = cast(CaseCollectingTextResult, runner.run(suite))
         write_case_results(case_report_path, result.case_results)
         return 0 if result.wasSuccessful() else 1
     except Exception:
@@ -139,6 +148,13 @@ def main() -> int:
         )
         traceback.print_exc()
         return 1
+
+
+def _format_error(err: Any) -> str:
+    if not isinstance(err, tuple) or len(err) != 3:
+        return repr(err)
+    exc_type, exc_value, exc_traceback = err
+    return "".join(traceback.format_exception(exc_type, exc_value, exc_traceback))
 
 
 if __name__ == "__main__":

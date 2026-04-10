@@ -1,2 +1,3 @@
-from __future__ import annotations
+"""Evaluation API package."""
 
+from __future__ import annotations

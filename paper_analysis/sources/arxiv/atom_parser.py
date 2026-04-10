@@ -1,3 +1,5 @@
+"""Parse official arXiv Atom responses into normalized paper records."""
+
 from __future__ import annotations
 
 import xml.etree.ElementTree as ET
@@ -14,9 +16,8 @@ ATOM_NAMESPACE = {
 
 def parse_atom_feed(xml_data: bytes) -> list[Paper]:
     """Parse arXiv Atom feed payload into normalized Paper records."""
-
     try:
-        root = ET.fromstring(xml_data)
+        root = ET.fromstring(xml_data)  # noqa: S314 - input is the official arXiv Atom feed payload
     except ET.ParseError as exc:
         raise CliInputError("arXiv API 返回的 XML 无法解析") from exc
 
@@ -92,6 +93,7 @@ def _collapse_whitespace(value: str) -> str:
 
 def _format_published_at(value: str) -> str:
     try:
-        return datetime.fromisoformat(value.replace("Z", "+00:00")).strftime("%Y-%m-%d")
+        normalized = f"{value[:-1]}+00:00" if value.endswith("Z") else value
+        return datetime.fromisoformat(normalized).strftime("%Y-%m-%d")
     except ValueError:
         return value

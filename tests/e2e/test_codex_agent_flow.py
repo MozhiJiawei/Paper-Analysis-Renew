@@ -6,6 +6,7 @@ import shutil
 import subprocess
 import unittest
 from pathlib import Path
+from typing import cast
 
 from paper_analysis.testing.case_metadata import CaseMetadataMixin
 
@@ -25,6 +26,7 @@ class CodexAgentE2ETests(CaseMetadataMixin, unittest.TestCase):
 
         codex_path = shutil.which("codex")
         self.assertTrue(codex_path, "未找到 codex CLI，无法执行 Codex 黑盒 e2e。")
+        assert codex_path is not None
 
         report_dir = ROOT_DIR / "artifacts" / "e2e" / "arxiv" / "latest"
         if report_dir.exists():
@@ -81,8 +83,8 @@ class CodexAgentE2ETests(CaseMetadataMixin, unittest.TestCase):
             event
             for event in events
             if event.get("type") == "item.completed"
-            and event.get("item", {}).get("type") == "command_execution"
-            and ".codex/skills/paper-analysis/SKILL.md" in event.get("item", {}).get("command", "")
+            and _event_item(event).get("type") == "command_execution"
+            and ".codex/skills/paper-analysis/SKILL.md" in str(_event_item(event).get("command", ""))
         ]
         self.record_step(f"检查事件流中是否读取 repo-local skill，命中 {len(skill_reads)} 次。")
         self.assertTrue(skill_reads, "Codex 没有在事件流中读取 repo-local paper-analysis skill。")
@@ -91,11 +93,11 @@ class CodexAgentE2ETests(CaseMetadataMixin, unittest.TestCase):
             event
             for event in events
             if event.get("type") == "item.completed"
-            and event.get("item", {}).get("type") == "command_execution"
-            and "paper_analysis.cli.main arxiv report" in event.get("item", {}).get("command", "")
-            and "--source-mode subscription-api" in event.get("item", {}).get("command", "")
-            and "--subscription-date 2025-09/09-01" in event.get("item", {}).get("command", "")
-            and event.get("item", {}).get("exit_code") == 0
+            and _event_item(event).get("type") == "command_execution"
+            and "paper_analysis.cli.main arxiv report" in str(_event_item(event).get("command", ""))
+            and "--source-mode subscription-api" in str(_event_item(event).get("command", ""))
+            and "--subscription-date 2025-09/09-01" in str(_event_item(event).get("command", ""))
+            and _event_item(event).get("exit_code") == 0
         ]
         self.record_step(f"检查事件流中是否成功执行联网 arxiv report，命中 {len(arxiv_report_runs)} 次。")
         self.assertTrue(arxiv_report_runs, "Codex 没有成功执行预期的联网 arxiv report 命令。")
@@ -116,9 +118,10 @@ class CodexAgentE2ETests(CaseMetadataMixin, unittest.TestCase):
         self.record_step("校验 Codex 驱动产生的 arXiv 报告产物完整存在。")
 
         payload = json.loads((report_dir / "result.json").read_text(encoding="utf-8"))
+        payload = cast(dict[str, object], payload)
         self.record_step(f"读取 result.json，确认 source={payload['source']}，count={payload['count']}。")
         self.assertEqual("arXiv", payload["source"])
-        self.assertGreaterEqual(payload["count"], 1)
+        self.assertGreaterEqual(cast(int, payload["count"]), 1)
         self.assertIn(
             "--subscription-date 2025-09/09-01",
             (report_dir / "summary.md").read_text(encoding="utf-8"),
@@ -140,14 +143,17 @@ def _parse_jsonl_events(content: str) -> list[dict[str, object]]:
     return events
 
 
+def _event_item(event: dict[str, object]) -> dict[str, object]:
+    item = event.get("item")
+    return item if isinstance(item, dict) else {}
+
+
 def _last_agent_message(events: list[dict[str, object]]) -> str:
     messages: list[str] = []
     for event in events:
         if event.get("type") != "item.completed":
             continue
-        item = event.get("item", {})
-        if not isinstance(item, dict):
-            continue
+        item = _event_item(event)
         if item.get("type") != "agent_message":
             continue
         messages.append(str(item.get("text", "")))

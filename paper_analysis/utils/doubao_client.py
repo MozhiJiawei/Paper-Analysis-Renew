@@ -1,20 +1,22 @@
+"""Shared Doubao API client for chat completion, embedding, and audit logging."""
+
 from __future__ import annotations
 
+import importlib
 import json
 import os
 import threading
 import time
 import uuid
+from collections.abc import Callable, Iterator
 from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import asdict, dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any, Protocol, Self, cast
 
-import yaml
-
+import yaml  # type: ignore[import-untyped]
 from paper_analysis.shared.paths import ARTIFACTS_DIR, ROOT_DIR
-
 
 DEFAULT_BASE_URL = "https://ark.cn-beijing.volces.com/api/v3"
 DEFAULT_MODEL = "doubao-seed-2-0-pro-260215"
@@ -26,10 +28,106 @@ DEFAULT_AUDIT_LOG_PATH = ARTIFACTS_DIR / "audit" / "doubao-api.jsonl"
 DEFAULT_AUDIT_REQUESTS_DIR = ARTIFACTS_DIR / "audit" / "doubao-api" / "requests"
 Runner = Callable[[list[dict[str, Any]]], dict[str, Any]]
 _AUDIT_LOG_LOCK = threading.Lock()
+MAX_CONCURRENCY = 10
+MAX_EMBEDDING_BATCH_SIZE = 256
+
+
+class _EmbeddingItemProtocol(Protocol):
+    embedding: list[float] | tuple[float, ...] | None
+
+
+class _EmbeddingResponseProtocol(Protocol):
+    data: list[_EmbeddingItemProtocol] | None
+    usage: object
+
+
+class _EmbeddingEndpointProtocol(Protocol):
+    def create(self, *, model: str, input: list[str]) -> _EmbeddingResponseProtocol: ...  # noqa: A002
+
+
+class _MultimodalEmbeddingDataProtocol(Protocol):
+    embedding: list[float] | tuple[float, ...] | None
+
+
+class _MultimodalEmbeddingResponseProtocol(Protocol):
+    data: _MultimodalEmbeddingDataProtocol | None
+    usage: object
+
+
+class _MultimodalEmbeddingEndpointProtocol(Protocol):
+    def create(
+        self,
+        *,
+        model: str,
+        input: list[dict[str, str]],  # noqa: A002
+    ) -> _MultimodalEmbeddingResponseProtocol: ...
+
+
+class _MessageProtocol(Protocol):
+    content: str | None
+
+
+class _ChoiceProtocol(Protocol):
+    message: _MessageProtocol | None
+
+
+class _DeltaProtocol(Protocol):
+    content: str | None
+
+
+class _StreamingChoiceProtocol(Protocol):
+    delta: _DeltaProtocol
+
+
+class _ChatResponseProtocol(Protocol):
+    choices: list[_ChoiceProtocol]
+    usage: object
+
+
+class _StreamingChunkProtocol(Protocol):
+    choices: list[_StreamingChoiceProtocol]
+    usage: object
+
+
+class _StreamingResponseProtocol(Protocol):
+    usage: object
+
+    def __enter__(self) -> Self: ...
+
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc: BaseException | None,
+        traceback: object,
+    ) -> bool | None: ...
+
+    def __iter__(self) -> Iterator[_StreamingChunkProtocol]: ...
+
+
+class _ChatCompletionsEndpointProtocol(Protocol):
+    def create(
+        self,
+        *,
+        model: str,
+        messages: list[dict[str, Any]],
+        stream: bool,
+    ) -> _ChatResponseProtocol | _StreamingResponseProtocol: ...
+
+
+class _ChatEndpointProtocol(Protocol):
+    completions: _ChatCompletionsEndpointProtocol
+
+
+class _ArkClientProtocol(Protocol):
+    embeddings: _EmbeddingEndpointProtocol
+    multimodal_embeddings: _MultimodalEmbeddingEndpointProtocol
+    chat: _ChatEndpointProtocol
 
 
 @dataclass(slots=True)
 class DoubaoConfig:
+    """Resolved configuration values for one Doubao client instance."""
+
     api_key: str | None = None
     base_url: str = DEFAULT_BASE_URL
     model: str = DEFAULT_MODEL
@@ -38,6 +136,8 @@ class DoubaoConfig:
 
 @dataclass(slots=True)
 class DoubaoUsage:
+    """Token usage snapshot returned by Doubao chat or embedding APIs."""
+
     prompt_tokens: int | None = None
     completion_tokens: int | None = None
     total_tokens: int | None = None
@@ -45,12 +145,15 @@ class DoubaoUsage:
 
 @dataclass(slots=True)
 class DoubaoResponse:
+    """Normalized chat completion result returned to repository callers."""
+
     success: bool
     content: str | None
     error: str | None = None
     usage: DoubaoUsage | None = None
 
     def to_dict(self) -> dict[str, Any]:
+        """Convert the normalized response to a JSON-serializable payload."""
         payload = asdict(self)
         if self.usage is None:
             payload["usage"] = None
@@ -59,6 +162,8 @@ class DoubaoResponse:
 
 @dataclass(slots=True)
 class DoubaoEmbeddingResponse:
+    """Normalized embedding result returned to repository callers."""
+
     success: bool
     vectors: list[list[float]]
     model: str
@@ -66,6 +171,7 @@ class DoubaoEmbeddingResponse:
     usage: DoubaoUsage | None = None
 
     def to_dict(self) -> dict[str, Any]:
+        """Convert the embedding result to a JSON-serializable payload."""
         payload = asdict(self)
         if self.usage is None:
             payload["usage"] = None
@@ -74,6 +180,8 @@ class DoubaoEmbeddingResponse:
 
 @dataclass(slots=True)
 class DoubaoClient:
+    """Thread-safe Doubao client with lazy SDK construction and audit logging."""
+
     runner: Runner | None = None
     api_key: str | None = None
     base_url: str | None = None
@@ -88,6 +196,7 @@ class DoubaoClient:
     _executor_lock: threading.Lock = field(init=False, repr=False)
 
     def __post_init__(self) -> None:
+        """Load configuration, validate limits, and initialize lazy state."""
         self.concurrency = _validate_concurrency(self.concurrency)
         self.embedding_batch_size = _validate_embedding_batch_size(self.embedding_batch_size)
         config_payload = self._load_config()
@@ -102,18 +211,22 @@ class DoubaoClient:
 
     @property
     def resolved_api_key(self) -> str | None:
+        """Return the resolved API key after env/config fallback."""
         return self._config.api_key
 
     @property
     def resolved_base_url(self) -> str:
+        """Return the resolved Doubao base URL."""
         return self._config.base_url
 
     @property
     def resolved_model(self) -> str:
+        """Return the resolved default chat model."""
         return self._config.model
 
     @property
     def resolved_embedding_model(self) -> str | None:
+        """Return the resolved embedding model when configured."""
         return self._config.embedding_model
 
     def submit(
@@ -122,6 +235,7 @@ class DoubaoClient:
         *,
         stream: bool = False,
     ) -> Future[dict[str, Any]]:
+        """Submit one chat-completion request to the shared executor."""
         return self._get_executor().submit(self._run_chat_sync, messages, stream=stream)
 
     def embed_texts(
@@ -130,6 +244,7 @@ class DoubaoClient:
         *,
         model: str | None = None,
     ) -> DoubaoEmbeddingResponse:
+        """Embed a batch of texts through the standard or multimodal API surface."""
         if not texts:
             return DoubaoEmbeddingResponse(success=True, vectors=[], model=model or "")
         resolved_model = model or self.resolved_embedding_model
@@ -150,7 +265,7 @@ class DoubaoClient:
                 texts=texts,
                 model=resolved_model,
             )
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 - provider SDK raises backend-specific exception classes
             if _should_use_multimodal_embedding_api(resolved_model, exc):
                 normalized = self._embed_texts_via_multimodal(
                     texts=texts,
@@ -180,7 +295,7 @@ class DoubaoClient:
         model: str,
     ) -> DoubaoEmbeddingResponse:
         vectors: list[list[float]] = []
-        usage = DoubaoUsage()
+        usage: DoubaoUsage | None = DoubaoUsage()
         for batch in _chunk_list(texts, self.embedding_batch_size):
             response = self._get_client().embeddings.create(model=model, input=batch)
             normalized = self._normalize_embedding_response(response=response, model=model)
@@ -215,7 +330,7 @@ class DoubaoClient:
                 model=model,
                 usage=usage,
             )
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 - provider SDK raises backend-specific exception classes
             return DoubaoEmbeddingResponse(
                 success=False,
                 vectors=[],
@@ -226,15 +341,16 @@ class DoubaoClient:
     def _normalize_embedding_response(
         self,
         *,
-        response: Any,
+        response: object,
         model: str,
     ) -> DoubaoEmbeddingResponse:
-        data = getattr(response, "data", None) or []
+        typed_response = cast("_EmbeddingResponseProtocol", response)
+        data = typed_response.data or []
         return DoubaoEmbeddingResponse(
             success=True,
             vectors=[list(item.embedding or []) for item in data],
             model=model,
-            usage=_extract_usage(response),
+            usage=_extract_usage(typed_response),
         )
 
     def _run_chat_sync(self, messages: list[dict[str, Any]], *, stream: bool = False) -> dict[str, Any]:
@@ -265,7 +381,7 @@ class DoubaoClient:
                 stream=stream,
             )
             normalized = self._normalize_response(response, stream=stream)
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 - provider SDK raises backend-specific exception classes
             normalized = DoubaoResponse(success=False, content=None, error=str(exc))
         result = normalized.to_dict()
         self._write_audit_log(
@@ -286,19 +402,20 @@ class DoubaoClient:
                 self._executor = ThreadPoolExecutor(max_workers=self.concurrency)
         return self._executor
 
-    def _get_client(self) -> Any:
+    def _get_client(self) -> _ArkClientProtocol:
         existing = getattr(self._thread_local, "client", None)
         if existing is not None:
-            return existing
-        from volcenginesdkarkruntime import Ark
+            return cast("_ArkClientProtocol", existing)
+        ark_module = importlib.import_module("volcenginesdkarkruntime")
+        ark_client = ark_module.Ark
 
-        client = Ark(
+        client = ark_client(
             base_url=self.resolved_base_url,
             timeout=1800,
             api_key=self.resolved_api_key,
         )
         self._thread_local.client = client
-        return client
+        return cast("_ArkClientProtocol", client)
 
     def _load_config(self) -> dict[str, Any]:
         config_path = self.config_path or _default_config_path()
@@ -308,19 +425,25 @@ class DoubaoClient:
         doubao_config = payload.get("doubao")
         return dict(doubao_config) if isinstance(doubao_config, dict) else {}
 
-    def _normalize_response(self, response: Any, *, stream: bool) -> DoubaoResponse:
+    def _normalize_response(
+        self,
+        response: _ChatResponseProtocol | _StreamingResponseProtocol,
+        *,
+        stream: bool,
+    ) -> DoubaoResponse:
         if stream:
-            return self._normalize_streaming_response(response)
+            return self._normalize_streaming_response(cast("_StreamingResponseProtocol", response))
         content = ""
-        if response.choices and response.choices[0].message is not None:
-            content = response.choices[0].message.content or ""
+        typed_response = cast("_ChatResponseProtocol", response)
+        if typed_response.choices and typed_response.choices[0].message is not None:
+            content = typed_response.choices[0].message.content or ""
         return DoubaoResponse(
             success=True,
             content=content,
-            usage=_extract_usage(response),
+            usage=_extract_usage(typed_response),
         )
 
-    def _normalize_streaming_response(self, response: Any) -> DoubaoResponse:
+    def _normalize_streaming_response(self, response: _StreamingResponseProtocol) -> DoubaoResponse:
         chunks: list[str] = []
         usage: DoubaoUsage | None = None
         with response:
@@ -357,7 +480,7 @@ class DoubaoClient:
         response_path.write_text(response_content, encoding="utf-8")
         error_value = response.get("error")
         payload = {
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
             "request_id": request_id,
             "provider": "doubao",
             "source": source,
@@ -378,9 +501,8 @@ class DoubaoClient:
             error_path.write_text(str(error_value), encoding="utf-8")
             payload["error_path"] = str(error_path)
         line = json.dumps(payload, ensure_ascii=False)
-        with _AUDIT_LOG_LOCK:
-            with audit_path.open("a", encoding="utf-8") as handle:
-                handle.write(line + "\n")
+        with _AUDIT_LOG_LOCK, audit_path.open("a", encoding="utf-8") as handle:
+            handle.write(line + "\n")
 
     def _resolve_request_dir(self, audit_path: Path, request_id: str) -> Path:
         if self.audit_log_path is not None:
@@ -392,7 +514,7 @@ class DoubaoClient:
         return request_dir
 
 
-def _extract_usage(response: Any) -> DoubaoUsage | None:
+def _extract_usage(response: object) -> DoubaoUsage | None:
     usage = getattr(response, "usage", None)
     if usage is None:
         return None
@@ -409,7 +531,7 @@ def _extract_usage(response: Any) -> DoubaoUsage | None:
     )
 
 
-def _extract_multimodal_embedding_vector(response: Any) -> list[float]:
+def _extract_multimodal_embedding_vector(response: object) -> list[float]:
     data = getattr(response, "data", None)
     embedding = getattr(data, "embedding", None)
     if embedding is None:
@@ -467,13 +589,17 @@ def _render_prompt_markdown(messages: list[dict[str, Any]]) -> str:
         lines.append("```")
         lines.append("")
     return "\n".join(lines).rstrip() + "\n"
+
+
 def _validate_concurrency(value: int) -> int:
-    if 1 <= value <= 10:
+    if 1 <= value <= MAX_CONCURRENCY:
         return value
-    raise ValueError(f"Doubao 并发非法：{value}；允许范围：1~10")
+    raise ValueError(f"Doubao 并发非法：{value}；允许范围：1~{MAX_CONCURRENCY}")
 
 
 def _validate_embedding_batch_size(value: int) -> int:
-    if 1 <= value <= 256:
+    if 1 <= value <= MAX_EMBEDDING_BATCH_SIZE:
         return value
-    raise ValueError(f"Doubao embedding batch 非法：{value}；允许范围：1~256")
+    raise ValueError(
+        f"Doubao embedding batch 非法：{value}；允许范围：1~{MAX_EMBEDDING_BATCH_SIZE}"
+    )

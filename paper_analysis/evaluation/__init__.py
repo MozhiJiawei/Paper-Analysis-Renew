@@ -1,3 +1,5 @@
+"""A/B scaffold interfaces and helpers for evaluation routes."""
+
 from __future__ import annotations
 
 from paper_analysis.evaluation.ab_protocol import (

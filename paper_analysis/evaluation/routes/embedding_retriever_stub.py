@@ -1,18 +1,38 @@
+"""Embedding-based route scaffold backed by Doubao embedding prototypes."""
+
 from __future__ import annotations
 
-from dataclasses import dataclass
 import math
+from dataclasses import dataclass
+from typing import Protocol
 
 from paper_analysis.api.evaluation_predictor import EvaluationPredictor
 from paper_analysis.api.evaluation_protocol import EvaluationPaper, EvaluationPrediction
 from paper_analysis.evaluation.ab_protocol import BinaryRoutePrediction
 from paper_analysis.evaluation.errors import RouteNotImplementedError
 from paper_analysis.evaluation.routes.base import BaseBinaryRoute
-from paper_analysis.utils.doubao_client import DoubaoClient
+from paper_analysis.utils.doubao_client import DoubaoClient, DoubaoEmbeddingResponse
+
+
+class EmbeddingClient(Protocol):
+    """Minimal client surface required by the embedding route scaffold."""
+
+    resolved_embedding_model: str | None
+
+    def embed_texts(
+        self,
+        texts: list[str],
+        *,
+        model: str | None = None,
+    ) -> DoubaoEmbeddingResponse:
+        """Embed a batch of texts with the configured Doubao endpoint."""
+        ...
 
 
 @dataclass(frozen=True, slots=True)
 class SimilarityAnchor:
+    """Reference sentence paired with a positive route label."""
+
     label: str
     text: str
 
@@ -47,13 +67,16 @@ NEGATIVE_ANCHORS: tuple[str, ...] = (
 )
 
 class EmbeddingRetrieverStubRoute(BaseBinaryRoute):
+    """Binary route scaffold that compares papers against embedding prototypes."""
+
     def __init__(
         self,
         *,
-        client: DoubaoClient | None = None,
+        client: EmbeddingClient | None = None,
         threshold_margin: float = -0.01,
         min_positive_similarity: float = 0.50,
     ) -> None:
+        """Initialize the route with an embedding client and scoring thresholds."""
         super().__init__(
             route_name="embedding_similarity_binary",
             algorithm_version="embedding-sim-binary-doubao-v1",
@@ -70,6 +93,7 @@ class EmbeddingRetrieverStubRoute(BaseBinaryRoute):
         self._negative_centroid: list[float] = []
 
     def prepare(self) -> None:
+        """Load positive and negative embedding prototypes for later scoring."""
         embedding_model = self._client.resolved_embedding_model
         if not embedding_model:
             self.implementation_status = "stub"
@@ -107,6 +131,7 @@ class EmbeddingRetrieverStubRoute(BaseBinaryRoute):
         self._negative_centroid = _average_vectors(negative_response.vectors)
 
     def predict_many(self, papers: list[EvaluationPaper]) -> list[BinaryRoutePrediction]:
+        """Predict route labels by comparing paper embeddings to route prototypes."""
         if not papers:
             return []
         if not self._positive_centroids or not self._negative_centroid:
@@ -137,9 +162,7 @@ class EmbeddingRetrieverStubRoute(BaseBinaryRoute):
                 and margin >= self._threshold_margin
             )
 
-            if (
-                recall_priority_positive
-            ):
+            if recall_priority_positive:
                 prediction = EvaluationPrediction(
                     primary_research_object=primary_object,
                     preference_labels=[top_label],
