@@ -30,6 +30,7 @@ description: "Use when working in this repository on conference paper filtering,
 - `py -m paper_analysis.cli.main --help`
 - `py -m paper_analysis.cli.main conference --help`
 - `py -m paper_analysis.cli.main arxiv --help`
+- `py -m paper_analysis.cli.main quality send-test-email`
 - `py -m paper_analysis.cli.main quality lint`
 - `py -m paper_analysis.cli.main quality local-ci`
 - `py -m paper_analysis.cli.main report --source conference`
@@ -41,6 +42,7 @@ description: "Use when working in this repository on conference paper filtering,
 - 顶会筛选请求 -> `conference filter` 或 `conference report`
 - arXiv 日更 / 订阅请求 -> `arxiv daily-filter` 或 `arxiv report`
 - 本地检查 / 回归请求 -> `quality local-ci`
+- 邮件通道调试 / 测试邮件请求 -> `quality send-test-email`
 - 查看最近产物 -> `report --source <conference|arxiv>`
 
 缺少关键参数时，只追问必要信息：
@@ -54,6 +56,7 @@ description: "Use when working in this repository on conference paper filtering,
 - 顶会链路优先复用 `conference` 命名空间，不新增 `recommend`
 - arXiv 链路优先复用 `arxiv` 命名空间，不在入口层做新的偏好产品面
 - 质量检查默认运行 `quality local-ci`
+- 邮件通道调试默认复用 `quality send-test-email`，不新增 `email` 顶层命名空间
 - 文本产物与文档统一使用 UTF-8
 
 完整路由示例见：

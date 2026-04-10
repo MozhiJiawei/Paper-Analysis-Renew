@@ -46,6 +46,19 @@
 - 必要追问：
   - 无。默认直接执行
 
+### 邮件通道调试
+
+- 用户说：
+  - “帮我测试一下 QQ SMTP 能不能发邮件”
+  - “给固定邮箱发一封测试邮件”
+- 优先命令：
+  - `py -m paper_analysis.cli.main quality send-test-email`
+- 必要追问：
+  - 无。默认从 `SMTP_HOST`、`SMTP_PORT`、`SMTP_USERNAME`、`SMTP_PASSWORD`、`SMTP_FROM`、`SMTP_TO` 读取配置
+- 默认处理：
+  - 保持单收件人模式
+  - 不新增 `email` 顶层命名空间
+
 ### 查看最近报告
 
 - 用户说：

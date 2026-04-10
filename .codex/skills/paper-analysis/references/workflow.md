@@ -55,6 +55,19 @@ py -m paper_analysis.cli.main quality local-ci
 3. `mypy`
 4. 代码质量治理报告（仅告警）
 
+## 邮件通道调试
+
+```powershell
+py -m paper_analysis.cli.main quality send-test-email
+```
+
+执行步骤：
+
+1. 从环境变量读取 SMTP 配置
+2. 校验必填字段
+3. 构造 UTF-8 测试邮件
+4. 发送到固定收件人并写出 `.eml` 与结果 JSON 产物
+
 ## 最近报告
 
 ```powershell

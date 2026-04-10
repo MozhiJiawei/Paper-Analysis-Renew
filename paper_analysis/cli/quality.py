@@ -2,14 +2,22 @@
 
 from __future__ import annotations
 
+import json
 import os
 import subprocess
 import sys
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from paper_analysis.cli.common import emit_lines
+from paper_analysis.cli.common import emit_lines, print_cli_error
+from paper_analysis.domain.email_delivery import (
+    EmailConfigError,
+    EmailMessagePayload,
+    EmailSendResult,
+    load_email_config_from_env,
+)
 from paper_analysis.services.ci_html_writer import QualityStageResult, write_ci_html_report
+from paper_analysis.services.email_sender import send_email_message
 from paper_analysis.services.quality_case_support import (
     build_lint_case_result,
     build_stage_case_result,
@@ -61,6 +69,11 @@ def register(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) ->
         help="按 lint -> unit -> integration -> e2e 顺序执行",
     )
     local_ci_parser.set_defaults(handler=handle_local_ci)
+    send_email_parser = quality_subparsers.add_parser(
+        "send-test-email",
+        help="使用 SMTP 配置向固定收件人发送一封测试邮件",
+    )
+    send_email_parser.set_defaults(handler=handle_send_test_email)
 
     for stage_name in _quality_stage_names():
         stage_parser = quality_subparsers.add_parser(stage_name, help=f"只运行 {stage_name} 阶段")
@@ -88,6 +101,44 @@ def handle_single_stage(args: argparse.Namespace) -> int:
     """Run a single quality stage."""
     exit_code, _stage_result = _run_quality_stage(args.stage_name)
     return exit_code
+
+
+def handle_send_test_email(_args: argparse.Namespace) -> int:
+    """Send one standalone smoke-test email using environment SMTP config."""
+    try:
+        config = load_email_config_from_env()
+    except EmailConfigError as exc:
+        return print_cli_error(
+            scope="quality.send-test-email",
+            message=str(exc),
+            next_step=(
+                "设置 SMTP_HOST、SMTP_PORT、SMTP_USERNAME、SMTP_PASSWORD、"
+                "SMTP_FROM、SMTP_TO 后重试"
+            ),
+        )
+
+    artifact_dir = ARTIFACTS_DIR / "email" / "send-test-latest"
+    result_json_path = artifact_dir / "result.json"
+    eml_path = artifact_dir / "message.eml"
+    payload = _build_test_email_payload(config.to_address)
+    result = send_email_message(config, payload, eml_output_path=eml_path)
+    _write_email_result_artifact(result_json_path, payload, result)
+
+    if result.status == "sent":
+        emit_lines(
+            f"[OK] 已向 {result.recipient} 发送测试邮件。",
+            f"artifact: {result_json_path.relative_to(ROOT_DIR)}",
+        )
+        return 0
+
+    return print_cli_error(
+        scope="quality.send-test-email",
+        message=result.error_summary or "测试邮件发送失败",
+        next_step=(
+            "检查 QQ 邮箱 SMTP/授权码、网络连通性与 SMTP_TO 配置，"
+            f"并查看 {result_json_path.relative_to(ROOT_DIR)}"
+        ),
+    )
 
 
 def _run_quality_stage(stage_name: str) -> tuple[int, QualityStageResult]:
@@ -349,3 +400,59 @@ def _default_lint_summary(case_key: str, return_code: int) -> str:
 
 def _is_quality_report_warning(output: str) -> bool:
     return first_non_empty_line(output).startswith("[WARN]")
+
+
+def _build_test_email_payload(recipient: str) -> EmailMessagePayload:
+    subject = "Paper Analysis SMTP 测试邮件"
+    text_body = (
+        "这是一封来自 paper-analysis 的测试邮件。\n\n"
+        "如果你收到这封邮件，说明当前 SMTP 配置、UTF-8 编码和基础投递链路已打通。\n"
+        "后续 arXiv 订阅闭环可以直接复用这套发信能力。\n"
+    )
+    html_body = (
+        "<html><body>"
+        "<h1>Paper Analysis SMTP 测试邮件</h1>"
+        "<p>这是一封来自 <strong>paper-analysis</strong> 的测试邮件。</p>"
+        "<p>如果你收到这封邮件，说明当前 SMTP 配置、UTF-8 编码和基础投递链路已打通。</p>"
+        "<p>后续 arXiv 订阅闭环可以直接复用这套发信能力。</p>"
+        "</body></html>"
+    )
+    return EmailMessagePayload(
+        subject=subject,
+        text_body=text_body,
+        html_body=html_body,
+        recipient=recipient,
+        metadata={"Command": "quality.send-test-email"},
+    )
+
+
+def _write_email_result_artifact(
+    result_json_path: Path,
+    payload: EmailMessagePayload,
+    result: EmailSendResult,
+) -> None:
+    result_json_path.parent.mkdir(parents=True, exist_ok=True)
+    result_json_path.write_text(
+        json.dumps(
+            {
+                "subject": payload.subject,
+                "recipient": payload.recipient,
+                "result": _serialize_email_result(result),
+            },
+            ensure_ascii=False,
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+
+
+def _serialize_email_result(result: EmailSendResult) -> dict[str, object]:
+    return {
+        "status": result.status,
+        "recipient": result.recipient,
+        "sent_at": result.sent_at,
+        "error_type": result.error_type,
+        "error_summary": result.error_summary,
+        "message_id": result.message_id,
+        "eml_path": result.eml_path,
+    }

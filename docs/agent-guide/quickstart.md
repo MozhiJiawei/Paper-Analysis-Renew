@@ -20,6 +20,7 @@ py -m paper_analysis.cli.main --help
 py -m paper_analysis.cli.main conference report
 py -m paper_analysis.cli.main conference report --venue iclr --year 2025
 py -m paper_analysis.cli.main arxiv report
+py -m paper_analysis.cli.main quality send-test-email
 py -m paper_analysis.cli.main quality local-ci
 py -m paper_analysis.api.evaluation_server --port 8765
 ```
@@ -38,6 +39,7 @@ py -m paper_analysis.api.evaluation_server --port 8765
 
 - “帮我筛 ICLR 2025 论文” -> `conference filter` 或 `conference report`
 - “帮我看今天的 arXiv AI 更新” -> `arxiv daily-filter` 或 `arxiv report`
+- “帮我试一下 QQ SMTP 发信” -> `quality send-test-email`
 - “跑一下本地检查” -> `quality local-ci`
 - “看最近一次顶会报告” -> `report --source conference`
 
@@ -48,6 +50,31 @@ py -m paper_analysis.api.evaluation_server --port 8765
 - `report` 缺来源时追问 `conference` 或 `arxiv`
 
 不要新增 `recommend` 命名空间。
+
+## QQ SMTP 测试邮件
+
+先准备环境变量：
+
+```powershell
+$env:SMTP_HOST = "smtp.qq.com"
+$env:SMTP_PORT = "587"
+$env:SMTP_USERNAME = "your-account@qq.com"
+$env:SMTP_PASSWORD = "你的 QQ 邮箱授权码"
+$env:SMTP_FROM = "your-account@qq.com"
+$env:SMTP_TO = "lijiawei14@huawei.com"
+```
+
+然后执行：
+
+```powershell
+py -m paper_analysis.cli.main quality send-test-email
+```
+
+结果会写到：
+
+```text
+artifacts/email/send-test-latest/
+```
 
 ## paperlists 子模块
 

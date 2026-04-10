@@ -15,6 +15,7 @@
 - 顶会命名空间：`conference`
 - arXiv 命名空间：`arxiv`
 - 质量门禁入口：`quality local-ci`
+- SMTP 测试邮件入口：`quality send-test-email`
 - 评测 API 服务：`py -m paper_analysis.api.evaluation_server`
 - 顶会真实数据源：`third_party/paperlists` 子模块
 - CI HTML 审核页：`artifacts/quality/local-ci-latest.html`
@@ -52,6 +53,12 @@ py -m paper_analysis.cli.main arxiv report
 py -m paper_analysis.cli.main quality local-ci
 ```
 
+发送 SMTP 测试邮件：
+
+```powershell
+py -m paper_analysis.cli.main quality send-test-email
+```
+
 启动本地评测 API：
 
 ```powershell
@@ -65,6 +72,12 @@ artifacts/quality/local-ci-latest.html
 ```
 
 该页面会汇总测试阶段状态、执行输出，以及 `conference` / `arxiv` 的 e2e 推荐报告。
+
+测试邮件命令会把发送结果和 `.eml` 快照写到：
+
+```text
+artifacts/email/send-test-latest/
+```
 
 ## 文档入口
 
