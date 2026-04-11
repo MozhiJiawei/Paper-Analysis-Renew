@@ -1,7 +1,7 @@
 ---
 title: feat: 收敛推荐算法研究对象四分类
 type: feat
-status: active
+status: completed
 date: 2026-04-11
 ---
 
@@ -272,6 +272,8 @@ date: 2026-04-11
 - [ ] `negative_tier=negative` 的样本不会计入研究对象 accuracy / precision / recall / f1
 - [ ] 研究子类维度的评测仅基于 `negative_tier=positive` 的样本子集
 - [ ] `negative_tier=negative` 的样本不会计入研究子类 accuracy / precision / recall / f1
+- [ ] 真实评测链路中的研究对象四分类聚合指标满足 `accuracy > 0.8`
+- [ ] 真实评测链路中的研究对象四分类聚合指标满足 `recall > 0.8`
 - [ ] 子仓评测报告明确展示“全量正负样本识别 + 正样本子集上的研究对象/研究子类指标”口径，并在文案中说明负样本未标注这两个维度
 - [ ] 主仓真实评测 API e2e 继续通过
 - [ ] 子仓真实评测 CLI 调主仓接口的最小 e2e 在新标签集合下继续通过
@@ -283,6 +285,7 @@ date: 2026-04-11
 - 规则实现维护成本下降，新增论文样例时只需要判断三类显式识别目标和一个聚合桶，而不是在多个细分类之间摇摆。
 - 主仓与子仓评测链路都能稳定消费内部 `其他` 聚合概念，不再把截图中的长尾研究对象拆成多个评测桶。
 - 研究对象维度和研究子类维度指标都不再被未标注负样本稀释，正样本子集上的 precision / recall / f1 能真实反映分类效果。
+- 真实评测链路中的研究对象四分类聚合结果保持 `accuracy > 0.8` 且 `recall > 0.8`。
 
 ## Dependencies & Risks
 

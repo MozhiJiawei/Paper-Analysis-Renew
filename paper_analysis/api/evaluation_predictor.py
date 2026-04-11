@@ -9,20 +9,65 @@ from paper_analysis.api.evaluation_protocol import EvaluationPaper, EvaluationPr
 
 MAX_EVIDENCE_SPANS = 2
 PRIMARY_RESEARCH_OBJECT_RULES: tuple[tuple[str, tuple[str, ...]], ...] = (
-    ("多模态 / VLM", ("multimodal", "vision-language", "vlm", "mllm", "llava", "video token", "visual token")),
-    ("Diffusion / 生成模型", ("diffusion", "denoising", "stable diffusion", "u-net", "dit")),
-    ("强化学习 / 序列决策", ("reinforcement learning", "rl", "sequence decision", "policy optimization")),
-    ("检索 / 推荐 / 搜索", ("retrieval", "recommendation", "recommender", "search engine", "ranking")),
-    ("计算机视觉", ("computer vision", "image classification", "object detection", "segmentation")),
-    ("语音 / 音频", ("speech", "audio", "asr", "tts", "speaker")),
-    ("评测 / Benchmark / 数据集", ("benchmark", "dataset", "survey", "empirical study")),
-    ("AI 系统 / 基础设施", ("serving platform", "system infrastructure", "resource manager", "runtime system")),
-    ("LLM", ("llm", "large language model", "language model", "transformer", "moe", "reasoning model")),
+    (
+        "多模态 / VLM",
+        (
+            "multimodal",
+            "multi-modal",
+            "vision-language",
+            "vision language",
+            "vision language model",
+            "video-language",
+            "vlm",
+            "mllm",
+            "llava",
+            "visual token",
+            "video token",
+            "image-text",
+            "image text",
+            "视觉语言",
+            "多模态",
+            "图文",
+        ),
+    ),
+    (
+        "Diffusion / 生成模型",
+        (
+            "diffusion",
+            "stable diffusion",
+            "latent diffusion",
+            "dit",
+            "diffusion transformer",
+            "text-to-image",
+            "生成模型",
+            "扩散模型",
+        ),
+    ),
+    (
+        "LLM",
+        (
+            "llm",
+            "large language model",
+            "language model",
+            "transformer",
+            "moe",
+            "reasoning model",
+            "大语言模型",
+            "语言模型",
+        ),
+    ),
 )
 
 
+def _contains_keyword(text: str, keyword: str) -> bool:
+    if re.search(r"[\u4e00-\u9fff]", keyword):
+        return keyword in text
+    pattern = r"(?<![a-z0-9])" + re.escape(keyword) + r"(?![a-z0-9])"
+    return re.search(pattern, text) is not None
+
+
 def _contains_any(text: str, keywords: tuple[str, ...]) -> bool:
-    return any(keyword in text for keyword in keywords)
+    return any(_contains_keyword(text, keyword) for keyword in keywords)
 
 
 def _extract_evidence(source_texts: list[str], keywords: tuple[str, ...]) -> list[str]:

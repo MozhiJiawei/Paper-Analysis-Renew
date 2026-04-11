@@ -146,6 +146,18 @@ class EvaluationApiE2ETests(CaseMetadataMixin, unittest.TestCase):
             self.record_step("检查报告产物只包含聚合指标，不泄露 paper_id、标题、摘要或 source_path。")
             counts = cast(dict[str, object], payload["counts"])
             overall = cast(dict[str, object], payload["overall"])
+            positive_primary_research_object_overall = cast(
+                dict[str, object],
+                payload["positive_primary_research_object_overall"],
+            )
+            research_object_accuracy = cast(
+                float,
+                positive_primary_research_object_overall["accuracy"],
+            )
+            research_object_micro_recall = cast(
+                float,
+                positive_primary_research_object_overall["micro_recall"],
+            )
             self.assertEqual(55, counts["evaluated_count"])
             self.assertEqual(0, counts["request_error_count"])
             self.assertEqual(0, counts["protocol_error_count"])
@@ -158,7 +170,11 @@ class EvaluationApiE2ETests(CaseMetadataMixin, unittest.TestCase):
                 "micro_f1",
             ):
                 self.assertIn(metric_name, overall)
+            self.assertGreater(research_object_accuracy, 0.8)
+            self.assertGreater(research_object_micro_recall, 0.8)
             self.assertIn("precision / recall / f1", summary)
+            self.assertIn("负样本未标注研究对象和研究子类", summary)
+            self.assertIn("LLM / VLM / Diffusion / 其他", summary)
             self.assertIn(algorithm_version, service_metadata_path.read_text(encoding="utf-8"))
             self.assertNotIn("paper_id", serialized)
             self.assertNotIn("title", serialized.lower())

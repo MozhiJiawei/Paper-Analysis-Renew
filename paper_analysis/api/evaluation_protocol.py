@@ -25,6 +25,8 @@ RESEARCH_OBJECT_LABELS = (
     "评测 / Benchmark / 数据集",
 )
 
+AGGREGATED_RESEARCH_OBJECT_LABELS = ("LLM", "VLM", "Diffusion", "其他")
+
 NEGATIVE_TIERS = ("positive", "negative")
 
 
@@ -105,6 +107,19 @@ def validate_annotation_fields(
     for label in evidence_spans:
         if label not in PREFERENCE_LABELS and label not in {"general", "negative"}:
             raise EvaluationProtocolError(f"evidence_spans 包含非法标签：{label}")
+
+
+def aggregate_primary_research_object(primary_research_object: str) -> str:
+    """Map a public-schema research object label into the internal four-way bucket."""
+    if primary_research_object == "LLM":
+        return "LLM"
+    if primary_research_object == "多模态 / VLM":
+        return "VLM"
+    if primary_research_object == "Diffusion / 生成模型":
+        return "Diffusion"
+    if primary_research_object in RESEARCH_OBJECT_LABELS:
+        return "其他"
+    raise EvaluationProtocolError(f"primary_research_object 非法：{primary_research_object}")
 
 
 @dataclass(slots=True)

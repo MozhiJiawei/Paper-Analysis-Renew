@@ -38,6 +38,38 @@ class EvaluationApiIntegrationTests(unittest.TestCase):
         finally:
             self._stop_server(process)
 
+    def test_server_prioritizes_vlm_over_llm_keywords(self) -> None:
+        port = _find_free_port()
+        process = self._start_server(port)
+        try:
+            response = self._post_json(
+                port,
+                {
+                    "requests": [
+                        {
+                            "request_id": "vlm-1",
+                            "paper": {
+                                "paper_id": "paper-vlm-1",
+                                "title": "Vision-Language Model with Language Model Alignment",
+                                "abstract": "A multimodal model aligns visual tokens with a language model for reasoning.",
+                                "abstract_zh": "这是一个带有语言模型对齐的多模态视觉语言模型。",
+                                "authors": ["Alice"],
+                                "venue": "ICLR 2026",
+                                "year": 2026,
+                                "source": "conference",
+                                "source_path": "tests.json",
+                                "keywords": ["multimodal", "vision-language"],
+                            },
+                        }
+                    ]
+                },
+            )
+            responses = cast(list[dict[str, object]], response["responses"])
+            prediction = cast(dict[str, object], responses[0]["prediction"])
+            self.assertEqual("多模态 / VLM", prediction["primary_research_object"])
+        finally:
+            self._stop_server(process)
+
     def _start_server(self, port: int) -> subprocess.Popen[str]:
         env = os.environ.copy()
         env["PYTHONUTF8"] = "1"
