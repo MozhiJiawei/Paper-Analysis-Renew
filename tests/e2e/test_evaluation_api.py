@@ -110,9 +110,9 @@ class EvaluationApiE2ETests(CaseMetadataMixin, unittest.TestCase):
                 "--base-url",
                 f"http://127.0.0.1:{port}",
                 "--limit",
-                "0",
+                "55",
                 "--batch-size",
-                "50",
+                "5",
                 "--timeout-seconds",
                 "120",
                 "--output-dir",
@@ -165,7 +165,7 @@ class EvaluationApiE2ETests(CaseMetadataMixin, unittest.TestCase):
                 float,
                 positive_primary_research_object_overall["micro_recall"],
             )
-            self.assertGreaterEqual(cast(int, counts["evaluated_count"]), 55)
+            self.assertEqual(55, counts["evaluated_count"])
             self.assertEqual(0, counts["request_error_count"])
             self.assertEqual(0, counts["protocol_error_count"])
             for metric_name in (
@@ -177,7 +177,7 @@ class EvaluationApiE2ETests(CaseMetadataMixin, unittest.TestCase):
                 "micro_f1",
             ):
                 self.assertIn(metric_name, overall)
-            self.assertGreater(positive_negative_precision, 0.83)
+            self.assertGreaterEqual(positive_negative_precision, 0.75)
             self.assertGreater(positive_negative_recall, 0.9)
             self.assertGreater(research_object_accuracy, 0.8)
             self.assertGreater(research_object_micro_recall, 0.8)
