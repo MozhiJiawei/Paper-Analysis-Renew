@@ -90,10 +90,18 @@ class ABScaffoldIntegrationTests(unittest.TestCase):
                 },
             ).run(papers=_sample_papers(), run_id="mixed-run")
 
-            self.assertEqual(1, result.counts["ready"])
-            self.assertEqual(4, result.counts["stub"])
+            self.assertEqual(2, result.counts["ready"])
+            self.assertEqual(3, result.counts["stub"])
             leaderboard = json.loads(Path(result.leaderboard_path).read_text(encoding="utf-8"))
-            self.assertEqual("fixture_ready_route", leaderboard["routes"][0]["route_name"])
+            ready_route_names = [
+                route["route_name"]
+                for route in leaderboard["routes"]
+                if route["execution_status"] == "ready"
+            ]
+            self.assertEqual(
+                ["embedding_similarity_binary", "fixture_ready_route"],
+                ready_route_names,
+            )
 
 
 if __name__ == "__main__":

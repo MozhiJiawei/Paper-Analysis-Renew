@@ -106,14 +106,18 @@ class EvaluationApiE2ETests(CaseMetadataMixin, unittest.TestCase):
                 [
                     sys.executable,
                     "-m",
-                    "paper_analysis_dataset.tools.evaluate_paper_filter_benchmark",
-                    "--base-url",
-                    f"http://127.0.0.1:{port}",
-                    "--limit",
-                    "55",
-                    "--output-dir",
-                    str(output_dir),
-                ],
+                "paper_analysis_dataset.tools.evaluate_paper_filter_benchmark",
+                "--base-url",
+                f"http://127.0.0.1:{port}",
+                "--limit",
+                "0",
+                "--batch-size",
+                "50",
+                "--timeout-seconds",
+                "120",
+                "--output-dir",
+                str(output_dir),
+            ],
                 cwd=DATASET_ROOT,
                 capture_output=True,
                 text=True,
@@ -146,10 +150,13 @@ class EvaluationApiE2ETests(CaseMetadataMixin, unittest.TestCase):
             self.record_step("检查报告产物只包含聚合指标，不泄露 paper_id、标题、摘要或 source_path。")
             counts = cast(dict[str, object], payload["counts"])
             overall = cast(dict[str, object], payload["overall"])
+            positive_negative = cast(dict[str, object], payload["positive_negative"])
             positive_primary_research_object_overall = cast(
                 dict[str, object],
                 payload["positive_primary_research_object_overall"],
             )
+            positive_negative_precision = cast(float, positive_negative["precision"])
+            positive_negative_recall = cast(float, positive_negative["recall"])
             research_object_accuracy = cast(
                 float,
                 positive_primary_research_object_overall["accuracy"],
@@ -158,7 +165,7 @@ class EvaluationApiE2ETests(CaseMetadataMixin, unittest.TestCase):
                 float,
                 positive_primary_research_object_overall["micro_recall"],
             )
-            self.assertEqual(55, counts["evaluated_count"])
+            self.assertGreaterEqual(cast(int, counts["evaluated_count"]), 55)
             self.assertEqual(0, counts["request_error_count"])
             self.assertEqual(0, counts["protocol_error_count"])
             for metric_name in (
@@ -170,6 +177,8 @@ class EvaluationApiE2ETests(CaseMetadataMixin, unittest.TestCase):
                 "micro_f1",
             ):
                 self.assertIn(metric_name, overall)
+            self.assertGreater(positive_negative_precision, 0.83)
+            self.assertGreater(positive_negative_recall, 0.9)
             self.assertGreater(research_object_accuracy, 0.8)
             self.assertGreater(research_object_micro_recall, 0.8)
             self.assertIn("precision / recall / f1", summary)

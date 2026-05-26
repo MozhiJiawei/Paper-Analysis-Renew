@@ -31,6 +31,24 @@ class EvaluationApiUnitTests(unittest.TestCase):
         self.assertEqual(["解码策略优化"], prediction.preference_labels)
         self.assertEqual("LLM", prediction.primary_research_object)
 
+    def test_predictor_keeps_quantized_llm_inference_positive(self) -> None:
+        paper = EvaluationPaper(
+            paper_id="paper-quant-llm-1",
+            title="Low-Bit Quantization for Efficient LLM Inference",
+            abstract="We optimize large language model inference throughput and memory via low-bit quantization.",
+            authors=["Alice"],
+            venue="ICLR 2026",
+            year=2026,
+            source="conference",
+            source_path="tests.json",
+            keywords=["quantization", "LLM", "inference"],
+        )
+
+        prediction = EvaluationPredictor().predict(paper)
+
+        self.assertEqual("positive", prediction.negative_tier)
+        self.assertEqual(["模型压缩"], prediction.preference_labels)
+
     def test_predictor_prioritizes_vlm_over_language_model_keywords(self) -> None:
         paper = EvaluationPaper(
             paper_id="paper-vlm-1",
@@ -100,7 +118,41 @@ class EvaluationApiUnitTests(unittest.TestCase):
 
         self.assertEqual("LLM", prediction.primary_research_object)
 
-    def test_predictor_falls_back_to_general_ml_for_other_research_objects(self) -> None:
+    def test_predictor_falls_back_when_only_generic_transformer_signal_exists(self) -> None:
+        paper = EvaluationPaper(
+            paper_id="paper-transformer-only",
+            title="Transformer Scaling Laws for General Representation Learning",
+            abstract="We study transformer scaling behavior for general representation learning across multiple domains.",
+            authors=["Alice"],
+            venue="ICLR 2026",
+            year=2026,
+            source="conference",
+            source_path="tests.json",
+            keywords=["transformer", "representation learning"],
+        )
+
+        prediction = EvaluationPredictor().predict(paper)
+
+        self.assertEqual("通用机器学习", prediction.primary_research_object)
+
+    def test_predictor_recovers_llm_from_transformer_plus_inference_context(self) -> None:
+        paper = EvaluationPaper(
+            paper_id="paper-transformer-inference",
+            title="Transformer Serving with KV Cache Compression",
+            abstract="We improve transformer inference with KV cache compression and autoregressive token generation.",
+            authors=["Alice"],
+            venue="ICLR 2026",
+            year=2026,
+            source="conference",
+            source_path="tests.json",
+            keywords=["transformer", "KV cache", "autoregressive inference"],
+        )
+
+        prediction = EvaluationPredictor().predict(paper)
+
+        self.assertEqual("LLM", prediction.primary_research_object)
+
+    def test_predictor_routes_non_three_way_objects_into_other_bucket(self) -> None:
         paper = EvaluationPaper(
             paper_id="paper-structure-only",
             title="Retrieval-Augmented Ranking for Web Search",
@@ -115,10 +167,28 @@ class EvaluationApiUnitTests(unittest.TestCase):
 
         prediction = EvaluationPredictor().predict(paper)
 
-        self.assertEqual("通用机器学习", prediction.primary_research_object)
+        self.assertEqual("其他", aggregate_primary_research_object(prediction.primary_research_object))
         self.assertEqual("negative", prediction.negative_tier)
         self.assertEqual([], prediction.preference_labels)
         self.assertIn("五个偏好标签", prediction.notes)
+
+    def test_predictor_rejects_benchmark_like_quantization_paper_without_inference_context(self) -> None:
+        paper = EvaluationPaper(
+            paper_id="paper-benchmark-quant",
+            title="A Benchmark for Quantization Methods in Vision Models",
+            abstract="We present a benchmark and empirical evaluation dataset for quantization methods on image classification.",
+            authors=["Alice"],
+            venue="ICLR 2026",
+            year=2026,
+            source="conference",
+            source_path="tests.json",
+            keywords=["benchmark", "quantization", "vision"],
+        )
+
+        prediction = EvaluationPredictor().predict(paper)
+
+        self.assertEqual("negative", prediction.negative_tier)
+        self.assertEqual([], prediction.preference_labels)
 
     def test_research_object_aggregation_maps_public_labels_to_four_buckets(self) -> None:
         self.assertEqual("LLM", aggregate_primary_research_object("LLM"))
