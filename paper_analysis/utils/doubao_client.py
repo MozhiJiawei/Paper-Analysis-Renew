@@ -15,7 +15,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Protocol, Self, cast
 
-import yaml  # type: ignore[import-untyped]
+import yaml
 from paper_analysis.shared.paths import ARTIFACTS_DIR, ROOT_DIR
 
 DEFAULT_BASE_URL = "https://ark.cn-beijing.volces.com/api/v3"
@@ -533,7 +533,7 @@ def _extract_usage(response: object) -> DoubaoUsage | None:
 
 def _extract_multimodal_embedding_vector(response: object) -> list[float]:
     data = getattr(response, "data", None)
-    embedding = getattr(data, "embedding", None)
+    embedding = data.get("embedding") if isinstance(data, dict) else getattr(data, "embedding", None)
     if embedding is None:
         raise ValueError("多模态 embedding 响应中缺少 embedding 字段。")
     return list(embedding)

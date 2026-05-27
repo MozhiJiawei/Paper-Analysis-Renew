@@ -24,16 +24,22 @@
 2. 若只是调整共享偏好逻辑，优先修改共享排序 / 偏好模型
 3. 若存在 arXiv 特有行为，再扩展 `ArxivPipeline`
 4. 真实 arXiv 来源优先放在 `paper_analysis/sources/arxiv/`
-5. 若接入订阅 API：
+5. 若接入订阅邮件：
+  - 在 source 层封装 Gmail IMAP 访问、完整 MIME 正文读取、订阅邮件匹配与日期映射
+  - `--subscription-date` 表示论文日期，按邮件内每篇论文的 `Date:` 字段过滤，而不是直接等同于邮件收件日期
+  - 在 pipeline 层统一衔接共享偏好筛选，不绕开 `PreferenceRanker`
+  - 在 CLI 层只负责参数校验和结构化失败输出
+6. 若接入或维护订阅 API：
   - 在 source 层封装查询构造、请求执行、Atom 解析
   - 在 pipeline 层统一衔接共享偏好筛选，不绕开 `PreferenceRanker`
   - 在 CLI 层只负责参数校验和结构化失败输出
   - 维持单连接、低频请求，遵守 arXiv API 限流
-6. 补充回归测试：
+  - API 链路只作为显式兼容/排障入口，常规默认路径不要主动补 `--source-mode subscription-api`
+7. 补充回归测试：
   - unit：日期解析、查询构造、Atom 解析
   - integration：pipeline/source mode 调度、共享筛选语义、结构化失败
-  - e2e：至少一条黄金路径真实访问 arXiv API，且默认纳入 `quality local-ci`
-7. 更新相关文档与 CLI `--help`
+  - e2e：至少一条黄金路径真实访问 Gmail arXiv 订阅邮件，且默认纳入 `quality local-ci`
+8. 更新相关文档与 CLI `--help`
 
 ## 新增测试层级或门禁
 

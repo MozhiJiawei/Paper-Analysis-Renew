@@ -26,15 +26,17 @@
 
 - 用户说：
   - “帮我看今天的 arXiv AI 更新”
-  - “拉一下 2025-09/09-01 的 arXiv cs.AI 订阅”
+  - “拉一下 2026-05/05-23 的 arXiv cs.AI 订阅”
 - 优先命令：
-  - `py -m paper_analysis.cli.main arxiv report --source-mode subscription-api --subscription-date 2025-09/09-01 --category cs.AI`
-  - `py -m paper_analysis.cli.main arxiv daily-filter --source-mode subscription-api --subscription-date 2025-09/09-01 --category cs.AI`
+  - `py -m paper_analysis.cli.main arxiv report --subscription-date 2026-05/05-23 --category cs.AI`
+  - `py -m paper_analysis.cli.main arxiv daily-filter --subscription-date 2026-05/05-23 --category cs.AI`
 - 必要追问：
   - 缺 `subscription-date` 时追问订阅日期
 - 默认处理：
+  - 不主动补 `--source-mode subscription-api`；有 `--subscription-date` 时默认走 Gmail 订阅邮件
   - 未给分类时可省略 `--category`
   - 未给数量时使用 CLI 默认 `--max-results 10`
+  - arXiv API 容易出现 429、长时间无响应或大分页不稳定，只有用户明确要求 API 排障时才显式传 `--source-mode subscription-api`
 
 ### 质量检查 / 回归验证
 

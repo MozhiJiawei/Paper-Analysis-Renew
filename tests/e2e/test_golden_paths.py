@@ -69,7 +69,7 @@ class GoldenPathE2ETests(CaseMetadataMixin, unittest.TestCase):
         self.record_step("检查 stdout.txt 含候选不足提示，确认文本产物内容稳定。")
 
     def test_arxiv_report_generates_stable_artifacts(self) -> None:
-        """【arxiv】arXiv API 可以正常获取论文。"""
+        """【arxiv】arXiv 订阅邮件可以正常获取论文。"""
 
         self.set_case_source_label("arxiv e2e")
         self.set_failure_check_description("CLI 返回码非 0，或联网 arXiv 报告缺少关键产物时判定失败。")
@@ -85,10 +85,8 @@ class GoldenPathE2ETests(CaseMetadataMixin, unittest.TestCase):
                 "paper_analysis.cli.main",
                 "arxiv",
                 "report",
-                "--source-mode",
-                "subscription-api",
                 "--subscription-date",
-                "2025-09/09-01",
+                "2026-05/05-23",
                 "--fetch-all",
             ],
             cwd=ROOT_DIR,
@@ -151,10 +149,8 @@ class GoldenPathE2ETests(CaseMetadataMixin, unittest.TestCase):
                 "paper_analysis.cli.main",
                 "arxiv",
                 "report",
-                "--source-mode",
-                "subscription-api",
                 "--subscription-date",
-                "2025-09/09-01",
+                "2026-05/05-23",
                 "--fetch-all",
             ]
         )
@@ -190,7 +186,7 @@ class GoldenPathE2ETests(CaseMetadataMixin, unittest.TestCase):
         self.record_step("读取 local-ci-latest.html，检查顶会标题、arXiv 区块和 E2E 报告附件是否存在。")
         self.assertIn("Agentic Retrieval Planning for Long-Horizon Tasks", html)
         self.assertIn("arXiv", html)
-        self.assertIn("--source-mode subscription-api", html)
+        self.assertIn("--source-mode subscription-email", html)
         self.assertIn("E2E 报告附件", html)
 
     def _run_report(self, command: list[str]) -> None:

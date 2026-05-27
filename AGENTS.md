@@ -32,6 +32,17 @@
 - `quality local-ci`
 - `report --source <conference|arxiv>`
 
+## arXiv 默认来源
+
+arXiv 订阅链路默认使用 Gmail 中的 arXiv 订阅邮件，不要在自然语言路由、E2E 或常规 CI 命令中主动补 `--source-mode subscription-api`。
+
+- 常规订阅命令写成：`py -m paper_analysis.cli.main arxiv report --subscription-date YYYY-MM/MM-DD`
+- 提供 `--subscription-date` 且未显式设置 `--source-mode` 时，CLI 会自动使用 `subscription-email`
+- 邮件模式按订阅邮件内每篇论文的 `Date:` 字段把论文映射到本地 `--subscription-date`
+- arXiv 官方 API 链路保留为显式兼容/排障入口：只有用户明确要求 API 时才使用 `--source-mode subscription-api`
+
+这样做是因为 arXiv API 在真实联网环境里容易出现 429、长时间无响应或大分页不稳定；订阅邮件是每日订阅业务的主事实来源，日期语义也更贴近日常报告行为。
+
 ## 跨仓评测启动方式
 
 跨仓评测 API 不属于主仓稳定 CLI 命令面，但属于正式支持的评测契约。
@@ -52,5 +63,5 @@
 - 新增业务能力时，不要把“推荐”单独抽成新命名空间。
 - 文本产物、文档、样例数据统一使用 UTF-8。
 - 新增来源、规则或测试层级时，更新 `docs/engineering/extending-cli.md`。
-- `quality local-ci` 默认包含真实联网的 arXiv e2e，执行环境按外网始终畅通处理，不要将其降级为可选检查。
+- `quality local-ci` 默认包含真实联网的 arXiv 邮件订阅 e2e，执行环境按 Gmail IMAP 与外网始终畅通处理，不要将其降级为可选检查。
 - `.gitignore` 中忽略 `todos` 是仓库规范的一部分，后续评审不要再把它作为问题提出。

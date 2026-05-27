@@ -10,10 +10,14 @@ from collections import Counter, defaultdict
 from dataclasses import dataclass, field
 from functools import lru_cache
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any, Protocol
 
 from paper_analysis.api.evaluation_protocol import EvaluationPaper, EvaluationPrediction
+from paper_analysis.utils.ai_client import FallbackAiClient
 from paper_analysis.utils.doubao_client import DoubaoClient
+
+if TYPE_CHECKING:
+    from concurrent.futures import Future
 
 MAX_EVIDENCE_SPANS = 2
 ROOT_DIR = Path(__file__).resolve().parents[2]
@@ -761,13 +765,54 @@ def _extract_sentence(text: str, keyword_lower: str) -> str:
     return text.strip()[:240]
 
 
+class EvaluationAiClient(Protocol):
+    """Minimal AI client surface required by the evaluation predictor."""
+
+    @property
+    def resolved_api_key(self) -> str | None:
+        """Return the resolved provider API key when configured."""
+        ...
+
+    @property
+    def resolved_embedding_model(self) -> str | None:
+        """Return the resolved embedding model when configured."""
+        ...
+
+    def submit(
+        self,
+        messages: list[dict[str, Any]],
+        *,
+        stream: bool = False,
+    ) -> Future[dict[str, Any]]:
+        """Submit one chat-completion request."""
+        ...
+
+    def embed_texts(
+        self,
+        texts: list[str],
+        *,
+        model: str | None = None,
+    ) -> EvaluationEmbeddingResponse:
+        """Embed a batch of texts."""
+        ...
+
+
+class EvaluationEmbeddingResponse(Protocol):
+    """Minimal embedding response surface required by the evaluation predictor."""
+
+    success: bool
+    vectors: list[list[float]]
+
+
+
 @dataclass(slots=True)
 class EvaluationPredictor:
     """Predicts a single-label preference result from paper metadata."""
 
     algorithm_version: str = "heuristic-v1"
     llm_hard_case_review: bool = False
-    _doubao_client: DoubaoClient | None = field(default=None, init=False, repr=False)
+    ai_provider: str = "openrouter"
+    _ai_client: EvaluationAiClient | None = field(default=None, init=False, repr=False)
     _llm_cache: dict[str, bool] = field(default_factory=dict, init=False, repr=False)
     _embedding_cache: dict[str, list[float] | None] = field(default_factory=dict, init=False, repr=False)
     _embedding_anchor_cache: dict[str, Any] = field(default_factory=dict, init=False, repr=False)
@@ -824,7 +869,7 @@ class EvaluationPredictor:
                 preference_labels=[],
                 negative_tier="negative",
                 evidence_spans={"negative": [paper.title]},
-                notes="高风险正样本经 Doubao embedding 复核后回退为 negative。",
+                notes=f"高风险正样本经 {self.ai_provider} embedding 复核后回退为 negative。",
             )
 
         if embedding_review is None and self._should_llm_review_positive():
@@ -839,7 +884,7 @@ class EvaluationPredictor:
                     preference_labels=[],
                     negative_tier="negative",
                     evidence_spans={"negative": [paper.title]},
-                    notes="高风险正样本经 Doubao 复核后回退为 negative。",
+                    notes=f"高风险正样本经 {self.ai_provider} 复核后回退为 negative。",
                 )
 
         evidence = _extract_evidence(source_texts, label_keywords)
@@ -976,7 +1021,7 @@ class EvaluationPredictor:
         paper: EvaluationPaper,
         label: str,
     ) -> float | None:
-        client = self._get_doubao_client()
+        client = self._get_ai_client()
         if client is None or not client.resolved_api_key or not client.resolved_embedding_model:
             return None
         paper_vector = self._embed_text_cached(_paper_to_embedding_text_for_review(paper))
@@ -1032,7 +1077,7 @@ class EvaluationPredictor:
             if cache_key in self._llm_cache:
                 return self._llm_cache[cache_key]
 
-        client = self._get_doubao_client()
+        client = self._get_ai_client()
         if client is None or not client.resolved_api_key:
             return True
 
@@ -1077,16 +1122,21 @@ class EvaluationPredictor:
             self._llm_cache[cache_key] = decision
         return decision
 
-    def _get_doubao_client(self) -> DoubaoClient | None:
-        if self._doubao_client is None:
-            self._doubao_client = DoubaoClient(concurrency=4)
-        return self._doubao_client
+    def _get_ai_client(self) -> EvaluationAiClient | None:
+        if self._ai_client is None:
+            if self.ai_provider == "openrouter":
+                self._ai_client = FallbackAiClient(concurrency=4)
+            elif self.ai_provider == "doubao":
+                self._ai_client = DoubaoClient(concurrency=4)
+            else:
+                raise ValueError(f"不支持的 AI provider：{self.ai_provider}")
+        return self._ai_client
 
     def _embed_text_cached(self, text: str) -> list[float] | None:
         with self._embedding_cache_lock:
             if text in self._embedding_cache:
                 return self._embedding_cache[text]
-        client = self._get_doubao_client()
+        client = self._get_ai_client()
         if client is None or not client.resolved_embedding_model:
             return None
         try:
@@ -1103,7 +1153,7 @@ class EvaluationPredictor:
         with self._embedding_cache_lock:
             if self._embedding_anchor_cache:
                 return self._embedding_anchor_cache
-        client = self._get_doubao_client()
+        client = self._get_ai_client()
         if client is None or not client.resolved_embedding_model:
             return None
         positive_vectors: dict[str, list[list[float]]] = {}

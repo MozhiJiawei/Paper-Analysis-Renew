@@ -30,7 +30,7 @@ description: "Use when working in this repository on conference paper filtering,
 - `py -m paper_analysis.cli.main --help`
 - `py -m paper_analysis.cli.main conference --help`
 - `py -m paper_analysis.cli.main arxiv --help`
-- `py -m paper_analysis.cli.main arxiv report --source-mode subscription-api --subscription-date 2026-04/04-10 --deliver-subscription`
+- `py -m paper_analysis.cli.main arxiv report --subscription-date 2026-04/04-10 --deliver-subscription`
 - `py -m paper_analysis.cli.main quality send-test-email`
 - `py -m paper_analysis.cli.main quality lint`
 - `py -m paper_analysis.cli.main quality local-ci`
@@ -42,7 +42,7 @@ description: "Use when working in this repository on conference paper filtering,
 
 - 顶会筛选请求 -> `conference filter` 或 `conference report`
 - arXiv 日更 / 订阅请求 -> `arxiv daily-filter` 或 `arxiv report`
-- arXiv 订阅最小投递闭环请求 -> `arxiv report --source-mode subscription-api --subscription-date YYYY-MM/MM-DD --deliver-subscription`
+- arXiv 订阅最小投递闭环请求 -> `arxiv report --subscription-date YYYY-MM/MM-DD --deliver-subscription`
 - 本地检查 / 回归请求 -> `quality local-ci`
 - 邮件通道调试 / 测试邮件请求 -> `quality send-test-email`
 - 查看最近产物 -> `report --source <conference|arxiv>`
@@ -50,7 +50,7 @@ description: "Use when working in this repository on conference paper filtering,
 缺少关键参数时，只追问必要信息：
 
 - `conference` 缺会议或年份时追问 `venue` / `year`
-- `arxiv` 在 `subscription-api` 模式下缺日期时追问 `subscription-date`
+- `arxiv` 在 `subscription-api` 或 `subscription-email` 模式下缺日期时追问 `subscription-date`
 - `report` 缺来源时追问 `conference` 或 `arxiv`
 
 默认假设：
@@ -58,6 +58,7 @@ description: "Use when working in this repository on conference paper filtering,
 - 顶会链路优先复用 `conference` 命名空间，不新增 `recommend`
 - arXiv 链路优先复用 `arxiv` 命名空间，不在入口层做新的偏好产品面
 - arXiv 默认先抓取候选，再输出过滤后的推荐结果
+- arXiv 订阅默认使用 Gmail 订阅邮件；自然语言路由不要主动补 `--source-mode subscription-api`
 - 质量检查默认运行 `quality local-ci`
 - 邮件通道调试默认复用 `quality send-test-email`，不新增 `email` 顶层命名空间
 - 文本产物与文档统一使用 UTF-8
@@ -83,15 +84,20 @@ description: "Use when working in this repository on conference paper filtering,
 - 主仓 `quality local-ci` 只检查主仓能力，不联跑子仓测试
 - 只有在需要评测数据集或标注流程时，才初始化 `third_party/paper_analysis_dataset`
 - 如需让子仓通过 API 调主仓推荐算法，使用 `py -m paper_analysis.api.evaluation_server`
+- 评测复核默认走 OpenRouter，OpenRouter 失败时自动降级到 Doubao；如需强制 Doubao，可追加 `--ai-provider doubao`
 - 当前评测 API 采用批量协议：请求体为 `requests` 数组，响应体为 `responses` 数组；子仓评测 CLI 默认每批发送 50 条
 
 arXiv 输入模式：
 
 - `fixture`：读取本地样例 JSON
-- `subscription-api`：访问 arXiv 官方 API
-- 订阅 API 最小参数：`--source-mode subscription-api --subscription-date YYYY-MM/MM-DD`
+- `subscription-email`：读取 Gmail 中的 arXiv 订阅邮件，按邮件内每篇论文的 `Date:` 映射到 `--subscription-date`
+- `subscription-api`：访问 arXiv 官方 API，仅用于用户明确要求 API 或排障兼容场景
+- 订阅邮件最小参数：`--subscription-date YYYY-MM/MM-DD`
+- 订阅 API 显式参数：`--source-mode subscription-api --subscription-date YYYY-MM/MM-DD`
 - arXiv 输出默认是过滤后的推荐结果，而不是原始抓取全集
-- 订阅投递闭环最小参数：`arxiv report --source-mode subscription-api --subscription-date YYYY-MM/MM-DD --deliver-subscription`
+- 提供 `--subscription-date` 且未显式设置 `--source-mode` 时默认使用 `subscription-email`
+- 默认使用邮件而不是 API，是因为 arXiv API 在真实联网环境中容易出现 429、长时间无响应或大分页不稳定；订阅邮件是每日订阅报告的主事实来源
+- 订阅投递闭环最小参数：`arxiv report --subscription-date YYYY-MM/MM-DD --deliver-subscription`
 
 ## 首读文档
 

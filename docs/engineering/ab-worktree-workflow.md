@@ -75,7 +75,8 @@
 当前这条 embedding worktree 路线约定为：
 
 - route_name: `embedding_similarity_binary`
-- 默认通过 `~/.paper-analysis/doubao.yaml` 中的 `doubao.embedding_model` 调用 Doubao embedding
+- 默认通过 `~/.paper-analysis/openrouter.yaml` 中的 `openrouter.embedding_model` 调用 OpenRouter embedding
+- OpenRouter embedding 调用失败时，降级使用 `~/.paper-analysis/doubao.yaml` 中的 `doubao.embedding_model`
 - 若未配置可调用的 embedding endpoint / model，则该路线应以结构化原因回退为 `stub`，而不是直接破坏整轮 A/B 运行
 - A 路线当前实验记录见 `docs/engineering/embedding-sim-binary-a-route-notes.md`
 

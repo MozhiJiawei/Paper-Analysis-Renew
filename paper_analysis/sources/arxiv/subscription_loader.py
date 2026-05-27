@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
 from paper_analysis.cli.common import CliInputError
@@ -62,11 +63,22 @@ def build_subscription_query(
 
 
 def _date_range(subscription_date: str) -> tuple[str, str]:
+    date_value = parse_subscription_date(subscription_date)
+    date_token = date_value.strftime("%Y%m%d")
+    return f"{date_token}0000", f"{date_token}2359"
+
+
+def parse_subscription_date(subscription_date: str) -> datetime:
+    """Parse the stable YYYY-MM/MM-DD subscription date into a date value."""
     match = DATE_PATTERN.fullmatch(subscription_date)
     if match is None:
         raise CliInputError(
             f"非法订阅日期：{subscription_date}。期望格式为 YYYY-MM/MM-DD"
         )
     year, month, day = match.groups()
-    date_token = f"{year}{month}{day}"
-    return f"{date_token}0000", f"{date_token}2359"
+    try:
+        return datetime.strptime(f"{year}-{month}-{day}", "%Y-%m-%d").replace(tzinfo=UTC)
+    except ValueError as exc:
+        raise CliInputError(
+            f"非法订阅日期：{subscription_date}。期望格式为 YYYY-MM/MM-DD"
+        ) from exc

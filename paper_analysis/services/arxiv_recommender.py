@@ -39,6 +39,9 @@ class ArxivRecommender:
                 continue
             sublabel = prediction.preference_labels[0]
             paper.sampled_reason = sublabel
+            paper.raw_payload.setdefault("evaluation_prediction", {})[
+                "primary_research_object"
+            ] = prediction.primary_research_object
             paper.reasons = [
                 f"推理加速子类：{sublabel}",
                 prediction.notes,
@@ -83,4 +86,3 @@ def _flatten_evidence_spans(evidence_spans: dict[str, list[str]]) -> list[str]:
             continue
         flattened.extend(f"{label} 证据：{span}" for span in spans)
     return flattened
-

@@ -20,14 +20,25 @@ py -m paper_analysis.cli.main --help
 py -m paper_analysis.cli.main conference report
 py -m paper_analysis.cli.main conference report --venue iclr --year 2025
 py -m paper_analysis.cli.main arxiv report
-py -m paper_analysis.cli.main arxiv report --source-mode subscription-api --subscription-date 2026-04/04-10 --deliver-subscription
+py -m paper_analysis.cli.main arxiv report --subscription-date 2026-04/04-10 --deliver-subscription
 py -m paper_analysis.cli.main quality send-test-email
 py -m paper_analysis.cli.main quality local-ci
 py -m paper_analysis.api.evaluation_server --port 8765
 ```
 
+## OpenRouter 私有配置
+
+- OpenRouter 是默认 AI API 路径，支持 chat completion 与 embedding
+- OpenRouter 调用失败时，系统会降级到 Doubao
+- 默认优先读取环境变量 `OPENROUTER_API_KEY`
+- 如需本地配置文件，请放在用户私有目录 `~/.paper-analysis/openrouter.yaml`
+- 当前建议 chat model 为 `deepseek/deepseek-v4-pro`
+- 当前建议 embedding model 为 `qwen/qwen3-embedding-8b`
+- 仓库内只保留模板文件 `paper_analysis/config/openrouter.template.yaml`，不要在 `paper_analysis/config/` 下保存真实密钥
+
 ## Doubao 私有配置
 
+- Doubao 保留为 OpenRouter 调用失败时的兜底 provider
 - 默认优先读取环境变量 `ARK_API_KEY`
 - 如需本地配置文件，请放在用户私有目录 `~/.paper-analysis/doubao.yaml`
 - 若要调用 embedding 路线，请额外配置 `doubao.embedding_model`，值应为当前账号下可直接调用的 embedding endpoint / model
@@ -40,7 +51,7 @@ py -m paper_analysis.api.evaluation_server --port 8765
 
 - “帮我筛 ICLR 2025 论文” -> `conference filter` 或 `conference report`
 - “帮我看今天的 arXiv AI 更新” -> `arxiv daily-filter` 或 `arxiv report`
-- “把今天的 arXiv 订阅结果发邮件并更新本地页面” -> `arxiv report --source-mode subscription-api --subscription-date <YYYY-MM/MM-DD> --deliver-subscription`
+- “把今天的 arXiv 订阅结果发邮件并更新本地页面” -> `arxiv report --subscription-date <YYYY-MM/MM-DD> --deliver-subscription`
 - “帮我试一下 QQ SMTP 发信” -> `quality send-test-email`
 - “跑一下本地检查” -> `quality local-ci`
 - “看最近一次顶会报告” -> `report --source conference`
@@ -48,7 +59,7 @@ py -m paper_analysis.api.evaluation_server --port 8765
 缺少关键参数时，只追问必要信息：
 
 - `conference` 缺会议名或年份时追问
-- `arxiv` 在 `subscription-api` 模式下缺订阅日期时追问
+- `arxiv` 在 `subscription-api` 或 `subscription-email` 模式下缺订阅日期时追问
 - `report` 缺来源时追问 `conference` 或 `arxiv`
 
 不要新增 `recommend` 命名空间。
@@ -83,7 +94,7 @@ artifacts/email/send-test-latest/
 先准备和测试邮件相同的 SMTP 环境变量，然后执行：
 
 ```powershell
-py -m paper_analysis.cli.main arxiv report --source-mode subscription-api --subscription-date 2026-04/04-10 --deliver-subscription
+py -m paper_analysis.cli.main arxiv report --subscription-date 2026-04/04-10 --deliver-subscription
 ```
 
 首次闭环成功后，关键产物位于：
@@ -123,4 +134,7 @@ py -m paper_analysis.cli.main conference report --venue iclr --year 2025 --paper
 - CLI 优先
 - “推荐”不是独立产品面
 - arXiv 默认先抓取候选，再输出过滤后的推荐结果
-- `--deliver-subscription` 只允许在 `subscription-api` 模式下执行真实投递
+- `--deliver-subscription` 只允许在 `subscription-api` 或 `subscription-email` 模式下执行真实投递
+- `subscription-email` 模式通过 Gmail arXiv 订阅邮件读取论文，`--subscription-date` 仍表示论文日期，系统会按邮件内每篇论文的 `Date:` 字段做本地映射
+- 提供 `--subscription-date` 且未显式设置 `--source-mode` 时，默认使用 `subscription-email`
+- 自然语言路由不要主动补 `--source-mode subscription-api`；arXiv 官方 API 容易出现 429、长时间无响应或大分页不稳定，只有用户明确要求 API 排障时才显式传入

@@ -1,4 +1,4 @@
-"""arXiv paper loading pipeline for fixture and subscription-api modes."""
+"""arXiv paper loading pipeline for fixture, API, and email subscription modes."""
 
 from __future__ import annotations
 
@@ -9,6 +9,10 @@ from paper_analysis.cli.common import CliInputError
 from paper_analysis.services.arxiv_recommender import ArxivRecommender
 from paper_analysis.shared.paths import FIXTURES_DIR
 from paper_analysis.shared.sample_loader import load_papers, load_preferences
+from paper_analysis.sources.arxiv.affiliation_enricher import (
+    enrich_selected_arxiv_papers_with_affiliations,
+)
+from paper_analysis.sources.arxiv.email_loader import load_subscription_email_papers
 from paper_analysis.sources.arxiv.subscription_loader import load_subscription_papers
 
 if TYPE_CHECKING:
@@ -19,7 +23,7 @@ if TYPE_CHECKING:
 
 
 class ArxivPipeline:
-    """arXiv input pipeline for fixture and subscription-api sources."""
+    """arXiv input pipeline for fixture, API, and email subscription sources."""
 
     def __init__(self, recommender: ArxivRecommender | None = None) -> None:
         """Initialize the pipeline with an optional recommendation service."""
@@ -76,6 +80,14 @@ class ArxivPipeline:
                 categories=categories,
                 max_results=None if fetch_all else max_results,
             )
+        elif source_mode == "subscription-email":
+            if not subscription_date:
+                raise CliInputError("subscription-email 模式必须提供 --subscription-date")
+            paper_records = load_subscription_email_papers(
+                subscription_date=subscription_date,
+                categories=categories,
+                max_results=None if fetch_all else max_results,
+            )
         else:
             paper_records = load_papers(
                 papers_path or FIXTURES_DIR / "arxiv" / "sample_daily.json"
@@ -84,11 +96,17 @@ class ArxivPipeline:
         preferences = load_preferences(
             preferences_path or FIXTURES_DIR / "preferences" / "sample_preferences.json"
         )
-        recommendation_limit = None if source_mode == "subscription-api" and fetch_all else preferences.limit
+        recommendation_limit = (
+            None
+            if source_mode in {"subscription-api", "subscription-email"} and fetch_all
+            else preferences.limit
+        )
         selected_papers = self.recommender.recommend(
             paper_records,
             limit=recommendation_limit,
         ).papers
+        if source_mode in {"subscription-api", "subscription-email"}:
+            enrich_selected_arxiv_papers_with_affiliations(selected_papers)
         return self.Result(
             papers=selected_papers,
             preferences=preferences,

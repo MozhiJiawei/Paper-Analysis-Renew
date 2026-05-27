@@ -114,6 +114,12 @@ def build_parser() -> ArgumentParser:
         default="heuristic-v1",
         help="响应中返回的算法版本标识",
     )
+    parser.add_argument(
+        "--ai-provider",
+        choices=("doubao", "openrouter"),
+        default="openrouter",
+        help="评测复核使用的 AI provider，默认 openrouter；OpenRouter 失败时自动兜底 doubao。",
+    )
     return parser
 
 
@@ -122,7 +128,8 @@ def main() -> None:
     configure_utf8_stdio()
     args = build_parser().parse_args()
     EvaluationRequestHandler.predictor = EvaluationPredictor(
-        algorithm_version=args.algorithm_version
+        algorithm_version=args.algorithm_version,
+        ai_provider=args.ai_provider,
     )
     server = ThreadingHTTPServer((args.host, args.port), EvaluationRequestHandler)
     sys.stdout.write(
@@ -132,6 +139,7 @@ def main() -> None:
                 "host": args.host,
                 "port": args.port,
                 "algorithm_version": args.algorithm_version,
+                "ai_provider": args.ai_provider,
             },
             ensure_ascii=False,
         )

@@ -9,8 +9,9 @@ $RepoRoot = "D:\Git_Repo\Paper-Analysis-New"
 $RepoFullName = "MozhiJiawei/Paper-Analysis-Renew"
 $TimeZone = [System.TimeZoneInfo]::FindSystemTimeZoneById("China Standard Time")
 $NowShanghai = [System.TimeZoneInfo]::ConvertTime([DateTimeOffset]::UtcNow, $TimeZone)
-$Yesterday = $NowShanghai.Date.AddDays(-1)
-$SubscriptionDate = $Yesterday.ToString("yyyy-MM/MM-dd")
+$PaperDateLagDays = 4
+$PaperDate = $NowShanghai.Date.AddDays(-$PaperDateLagDays)
+$SubscriptionDate = $PaperDate.ToString("yyyy-MM/MM-dd")
 
 $RunStamp = $NowShanghai.ToString("yyyyMMdd-HHmmss")
 $LogRoot = Join-Path $RepoRoot "artifacts\automations\arxiv-github-issue-codex\$RunStamp"
@@ -22,15 +23,16 @@ $env:PYTHONIOENCODING = "utf-8"
 $Prompt = @(
     "Run the daily arXiv report workflow in repository D:\Git_Repo\Paper-Analysis-New, then publish the result to a GitHub Issue in repository $RepoFullName.",
     "",
-    "Network access is explicitly allowed. You may access the official arXiv API, external web pages or APIs, and GitHub. Do not use email or SMTP. Do not call --deliver-subscription.",
+    "Network access is explicitly allowed. Use the Gmail arXiv subscription email source, external web pages or APIs needed by the repository workflow, local GROBID if available, and GitHub. Do not force the arXiv API source. Do not call --deliver-subscription.",
     "",
-    "The Windows scheduled script has already computed yesterday in Asia/Shanghai as: $SubscriptionDate. Use this value as the CLI date argument.",
+    "The Windows scheduled script has computed the arXiv paper-content date in Asia/Shanghai as: $SubscriptionDate. Use this value as the CLI date argument.",
+    "This is intentionally not the same as the email received date: arXiv subscription emails lag the paper Date fields. The current automation uses a $PaperDateLagDays-day lag from the Asia/Shanghai run date so that the requested paper date is present in the latest available subscription email.",
     "",
     "First run this stable repository CLI command:",
     "",
-    "py -m paper_analysis.cli.main arxiv report --source-mode subscription-api --subscription-date $SubscriptionDate --fetch-all",
+    "py -m paper_analysis.cli.main arxiv report --subscription-date $SubscriptionDate --fetch-all",
     "",
-    "If this CLI command exits non-zero because arXiv returns HTTP 429, do not repeatedly retry and do not use email. Instead, check whether artifacts/e2e/arxiv/latest contains a usable fresh report. If usable artifacts exist, publish them to the GitHub Issue and explicitly note the HTTP 429 rate-limit condition in the issue.",
+    "The CLI defaults to subscription-email when --subscription-date is provided. If this command exits non-zero, do not drift to --source-mode subscription-api. Inspect stdout/stderr and report the concrete Gmail, GROBID, embedding, or GitHub failure reason.",
     "",
     "After the command finishes, read the generated artifacts under artifacts/e2e/arxiv/latest, especially summary.md, result.json, result.csv, and stdout.txt.",
     "",
@@ -71,7 +73,8 @@ if ($PrintCommandOnly) {
     Write-Host "Codex executable: $CodexExe"
     Write-Host "Working directory: $RepoRoot"
     Write-Host "GitHub repository: $RepoFullName"
-    Write-Host "Subscription date: $SubscriptionDate"
+    Write-Host "Paper-content date: $SubscriptionDate"
+    Write-Host "Paper date lag days: $PaperDateLagDays"
     Write-Host "Prompt path: $PromptPath"
     Write-Host "JSON log path: $JsonLogPath"
     Write-Host "Last message path: $LastMessagePath"

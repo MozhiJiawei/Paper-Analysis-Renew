@@ -53,13 +53,14 @@ artifacts/quality/local-ci-latest.html
 
 ## arXiv 联网 e2e 约定
 
-`tests/e2e/` 中的 arXiv 黄金路径默认真实访问 arXiv 官方 API。这是仓库当前的明确要求，不是可选检查。
+`tests/e2e/` 中的 arXiv 黄金路径默认真实访问 Gmail IMAP 中的 arXiv 订阅邮件。这是仓库当前的明确要求，不是可选检查。
 
-- `quality local-ci` 默认运行联网 arXiv e2e
-- 执行环境默认假设外网稳定可达
-- arXiv e2e 的目标是验证真实订阅抓取、结构化产物写出，以及 CI HTML 对真实产物的消费链路
+- `quality local-ci` 默认运行联网 arXiv 邮件订阅 e2e
+- 执行环境默认假设 Gmail IMAP 与外网稳定可达，并已配置 Gmail 应用专用密码
+- arXiv e2e 的目标是验证真实订阅邮件抓取、邮件内论文日期映射、结构化产物写出，以及 CI HTML 对真实产物的消费链路
 - 断言应尽量关注来源、数量下限、关键字段存在性和产物稳定性，避免依赖易漂移的固定标题
-- 联网实现必须遵守 arXiv API 的单连接、低频请求约束
+- 常规 E2E 与 CI 命令不要显式传入 `--source-mode subscription-api`；提供 `--subscription-date` 时应验证默认 `subscription-email` 路径
+- arXiv 官方 API 链路容易出现 429、长时间无响应或大分页不稳定，仅作为用户明确要求 API 或排障兼容时的显式路径保留
 
 ## Codex 自然语言 e2e 约定
 
@@ -74,7 +75,8 @@ artifacts/quality/local-ci-latest.html
 这条 e2e 的最低断言包括：
 
 - 事件流中出现对 `.codex/skills/paper-analysis/SKILL.md` 的读取
-- 事件流中成功执行 `py -m paper_analysis.cli.main arxiv report --source-mode subscription-api --subscription-date ...`
+- 事件流中成功执行 `py -m paper_analysis.cli.main arxiv report --subscription-date ...`
+- 事件流中的常规 arXiv 报告命令不得漂移到 `--source-mode subscription-api`
 - `artifacts/e2e/arxiv/latest/summary.md`、`result.json`、`result.csv`、`stdout.txt` 全部生成
 - `result.json["source"] == "arXiv"`，且结果数量大于等于 1
 
@@ -114,7 +116,7 @@ HTML 审核页会展示：
 - 优先写成“XX 可以正常 YY”或“XX 可用”这类句式，避免“验证……黄金路径……真实调用……”这类审计腔标题
 - 如果标题里出现 API、CLI、endpoint、artifact、schema 等词，必须先问一句：不用这些术语，产品/业务视角下这条测试到底在证明什么
 - 推荐格式：
-  - `【arxiv】arXiv API 可以正常获取论文。`
+  - `【arxiv】arXiv 订阅邮件可以正常获取论文。`
   - `【推荐】主仓推荐算法评测接口可用。`
   - `【推荐】子仓评测流程可以正常调用主仓推荐接口并生成报告。`
 

@@ -44,6 +44,7 @@ max-complexity = 12
 "paper_analysis/services/conference_pipeline.py" = ["PLR0913"]
 "paper_analysis/services/quality_case_support.py" = ["PLR0913"]
 "paper_analysis/utils/doubao_client.py" = ["PLR0913"]
+"paper_analysis/utils/openrouter_client.py" = ["PLR0913"]
 "scripts/**/*.py" = ["ANN401", "BLE001", "D", "FBT001", "INP001", "N802", "PERF401", "PLR2004", "T201", "TC006"]
 "scripts/quality/lint.py" = ["E402"]
 "scripts/quality/run_unittest_stage.py" = ["E402"]

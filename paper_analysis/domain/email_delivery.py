@@ -8,7 +8,7 @@ from os import environ, getenv
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-import yaml  # type: ignore[import-untyped]
+import yaml
 
 if TYPE_CHECKING:
     from collections.abc import Mapping

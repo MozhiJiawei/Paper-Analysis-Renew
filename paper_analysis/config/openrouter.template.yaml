@@ -1,0 +1,12 @@
+# OpenRouter API 私有配置模板
+# 请将真实密钥写入用户私有目录 ~/.paper-analysis/openrouter.yaml
+# 或通过环境变量 OPENROUTER_API_KEY 提供。
+# 不要把真实密钥写回仓库内的 paper_analysis/config/ 目录。
+
+openrouter:
+  api_key: "YOUR_OPENROUTER_API_KEY_HERE"
+  base_url: "https://openrouter.ai/api/v1"
+  chat_model: "deepseek/deepseek-v4-pro"
+  embedding_model: "qwen/qwen3-embedding-8b"
+  http_referer: ""
+  app_title: "paper-analysis"

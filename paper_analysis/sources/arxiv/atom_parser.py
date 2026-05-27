@@ -27,11 +27,8 @@ def parse_atom_feed(xml_data: bytes) -> list[Paper]:
         title = _collapse_whitespace(_extract_text(entry, "atom:title"))
         abstract = _collapse_whitespace(_extract_text(entry, "atom:summary"))
         published_at = _format_published_at(_extract_text(entry, "atom:published"))
-        authors = [
-            _collapse_whitespace(author.text or "")
-            for author in entry.findall("atom:author/atom:name", ATOM_NAMESPACE)
-            if (author.text or "").strip()
-        ]
+        authors = _extract_authors(entry)
+        organizations = _extract_author_affiliations(entry)
         categories = [tag for tag in _extract_categories(entry) if tag]
         pdf_url = _find_link(entry, "application/pdf")
 
@@ -44,13 +41,13 @@ def parse_atom_feed(xml_data: bytes) -> list[Paper]:
                 venue="arXiv",
                 authors=authors,
                 tags=categories,
-                organization="",
+                organization=" | ".join(organizations),
                 published_at=published_at,
                 primary_area=categories[0] if categories else "",
                 keywords=categories,
                 pdf_url=pdf_url,
                 source_path="arxiv-api",
-                raw_payload={"categories": categories, "authors": authors},
+                raw_payload={"categories": categories, "authors": authors, "affiliations": organizations},
             )
         )
     return papers
@@ -78,6 +75,29 @@ def _extract_categories(entry: ET.Element) -> list[str]:
     if primary_term in categories:
         categories.remove(primary_term)
     return [primary_term, *categories]
+
+
+def _extract_authors(entry: ET.Element) -> list[str]:
+    return [
+        _collapse_whitespace(author.text or "")
+        for author in entry.findall("atom:author/atom:name", ATOM_NAMESPACE)
+        if (author.text or "").strip()
+    ]
+
+
+def _extract_author_affiliations(entry: ET.Element) -> list[str]:
+    affiliations: list[str] = []
+    seen: set[str] = set()
+    for affiliation in entry.findall("atom:author/arxiv:affiliation", ATOM_NAMESPACE):
+        value = _collapse_whitespace(affiliation.text or "")
+        if not value:
+            continue
+        key = value.casefold()
+        if key in seen:
+            continue
+        seen.add(key)
+        affiliations.append(value)
+    return affiliations
 
 
 def _find_link(entry: ET.Element, content_type: str) -> str:

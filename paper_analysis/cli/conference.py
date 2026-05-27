@@ -113,6 +113,7 @@ def handle_report(args: argparse.Namespace) -> int:
         source_name="顶会",
         papers=result.papers,
         command_name=command_name,
+        analysis_count=result.candidate_count,
     )
     emit_lines(f"[OK] 顶会报告已生成：{artifacts['markdown']}")
     return 0

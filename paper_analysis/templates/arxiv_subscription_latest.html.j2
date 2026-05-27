@@ -119,6 +119,7 @@
         >
           <h2>{{ loop.index }}. {{ paper.title }}</h2>
           <p class="meta">作者：{{ paper.authors or "未知" }}</p>
+          <p class="meta">机构：{{ paper.organization or "未知" }}</p>
           <p class="meta">来源：{{ paper.venue }} | 发布时间：{{ paper.published_at or "未知" }}</p>
           <p>{{ paper.sampled_reason or "已进入推荐结果" }}</p>
           {% if paper.abstract %}

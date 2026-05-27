@@ -50,13 +50,13 @@ def _add_common_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--preferences", type=Path, help="偏好配置 JSON 路径")
     parser.add_argument(
         "--source-mode",
-        choices=["fixture", "subscription-api"],
+        choices=["fixture", "subscription-api", "subscription-email"],
         default="fixture",
-        help="输入来源，默认 fixture",
+        help="输入来源；提供 --subscription-date 时默认 subscription-email，否则默认 fixture",
     )
     parser.add_argument(
         "--subscription-date",
-        help="订阅日期，格式 YYYY-MM/MM-DD，仅 subscription-api 模式必填",
+        help="订阅日期，格式 YYYY-MM/MM-DD，仅 subscription-api/subscription-email 模式必填",
     )
     parser.add_argument(
         "--category",
@@ -79,13 +79,14 @@ def _add_common_arguments(parser: argparse.ArgumentParser) -> None:
 
 def handle_daily_filter(args: argparse.Namespace) -> int:
     """Run the arXiv fetch flow and print a compact terminal summary."""
+    _normalize_source_mode(args)
     try:
         papers, _preferences = _run_pipeline(args)
     except CliInputError as exc:
         return print_cli_error(
             scope="arxiv.daily-filter",
             message=str(exc),
-            next_step="检查 --input/--preferences，或在 subscription-api 模式下补充 --subscription-date",
+            next_step="检查 --input/--preferences，或在订阅模式下补充 --subscription-date",
         )
 
     if not papers:
@@ -100,6 +101,7 @@ def handle_daily_filter(args: argparse.Namespace) -> int:
 
 def handle_report(args: argparse.Namespace) -> int:
     """Run the arXiv report flow and write report artifacts."""
+    _normalize_source_mode(args)
     delivery_error = _validate_subscription_delivery_args(args)
     if delivery_error is not None:
         return delivery_error
@@ -118,7 +120,7 @@ def handle_report(args: argparse.Namespace) -> int:
         return print_cli_error(
             scope="arxiv.report",
             message=str(exc),
-            next_step="检查报告输入文件，或在 subscription-api 模式下补充有效的订阅参数",
+            next_step="检查报告输入文件，或在订阅模式下补充有效的订阅参数",
         )
 
     report_dir = ARTIFACTS_DIR / "e2e" / "arxiv" / "latest"
@@ -127,6 +129,7 @@ def handle_report(args: argparse.Namespace) -> int:
         source_name="arXiv",
         papers=result.papers,
         command_name=_build_command_name(args),
+        analysis_count=result.fetched_count,
     )
 
     if not args.deliver_subscription:
@@ -188,11 +191,11 @@ def _run_pipeline(args: argparse.Namespace) -> tuple[list[Paper], PreferenceProf
 def _validate_subscription_delivery_args(args: argparse.Namespace) -> int | None:
     if not args.deliver_subscription:
         return None
-    if args.source_mode != "subscription-api":
+    if args.source_mode not in {"subscription-api", "subscription-email"}:
         return print_cli_error(
             scope="arxiv.report",
-            message="订阅投递模式只支持 --source-mode subscription-api",
-            next_step="补充 --source-mode subscription-api 后重试",
+            message="订阅投递模式只支持 --source-mode subscription-api 或 subscription-email",
+            next_step="补充 --source-mode subscription-api 或 subscription-email 后重试",
         )
     if not args.subscription_date:
         return print_cli_error(
@@ -204,12 +207,12 @@ def _validate_subscription_delivery_args(args: argparse.Namespace) -> int | None
 
 
 def _build_command_name(args: argparse.Namespace) -> str:
-    if args.source_mode != "subscription-api":
+    if args.source_mode not in {"subscription-api", "subscription-email"}:
         return "arxiv report --deliver-subscription" if args.deliver_subscription else "arxiv report"
 
     parts = [
         "arxiv report",
-        "--source-mode subscription-api",
+        f"--source-mode {args.source_mode}",
         f"--subscription-date {args.subscription_date}",
     ]
     if args.fetch_all:
@@ -220,3 +223,8 @@ def _build_command_name(args: argparse.Namespace) -> str:
     if args.deliver_subscription:
         parts.append("--deliver-subscription")
     return " ".join(parts)
+
+
+def _normalize_source_mode(args: argparse.Namespace) -> None:
+    if args.source_mode == "fixture" and args.subscription_date:
+        args.source_mode = "subscription-email"

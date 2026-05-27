@@ -104,7 +104,8 @@ class SkillContractTests(unittest.TestCase):
         self.assertIn("codex exec --json", testing_quality)
         self.assertIn("prompt 不直接点名 skill", testing_quality)
         self.assertIn(".codex/skills/paper-analysis/SKILL.md", testing_quality)
-        self.assertIn("arxiv report --source-mode subscription-api", testing_quality)
+        self.assertIn("arxiv report --subscription-date", testing_quality)
+        self.assertIn("不得漂移到 `--source-mode subscription-api`", testing_quality)
 
 
 if __name__ == "__main__":

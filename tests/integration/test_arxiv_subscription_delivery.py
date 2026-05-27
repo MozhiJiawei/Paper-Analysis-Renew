@@ -76,6 +76,7 @@ class ArxivSubscriptionDeliveryIntegrationTests(unittest.TestCase):
         self.assertIn("First", latest_html)
         self.assertIn("解码策略优化", latest_html)
         self.assertIn("摘要：abstract", latest_html)
+        self.assertIn("机构：OpenAI", latest_html)
         self.assertNotIn("原因：", latest_html)
         self.assertIn("订阅最新报告", latest_html)
         self.assertIn("history", (self.site_dir / "history.json").name)
@@ -83,7 +84,7 @@ class ArxivSubscriptionDeliveryIntegrationTests(unittest.TestCase):
         self.assertIn("订阅历史列表", index_html)
         email_text = (Path(result.snapshot_path).parent / "email.txt").read_text(encoding="utf-8")
         self.assertIn("子类：解码策略优化", email_text)
-        self.assertIn("组织：OpenAI", email_text)
+        self.assertIn("机构：OpenAI", email_text)
         self.assertIn("摘要：abstract", email_text)
 
     def test_delivery_still_renders_no_hits_email_and_site(self) -> None:

@@ -5,7 +5,7 @@
   },
   {
     "request": "帮我看今天的 arXiv AI 更新",
-    "expected_command": "py -m paper_analysis.cli.main arxiv report --source-mode subscription-api --subscription-date 2025-09/09-01 --category cs.AI"
+    "expected_command": "py -m paper_analysis.cli.main arxiv report --subscription-date 2026-05/05-23 --category cs.AI"
   },
   {
     "request": "跑一下本地检查",

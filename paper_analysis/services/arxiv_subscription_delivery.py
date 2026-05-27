@@ -271,7 +271,7 @@ def _render_email_bodies(snapshot: DeliveryRunSnapshot) -> tuple[str, str]:
                 f"   作者：{paper.authors or '未知'}",
             ]
             if paper.organization:
-                paper_lines.append(f"   组织：{paper.organization}")
+                paper_lines.append(f"   机构：{paper.organization}")
             paper_lines.extend(
                 [
                     f"   发表时间：{paper.published_at or '未知'}",
@@ -298,7 +298,7 @@ def _render_email_bodies(snapshot: DeliveryRunSnapshot) -> tuple[str, str]:
                 f"<strong>{paper.title}</strong><br/>"
                 f"子类：{paper.sampled_reason or '未分类'}<br/>"
                 f"作者：{paper.authors or '未知'}<br/>"
-                + (f"组织：{paper.organization}<br/>" if paper.organization else "")
+                + (f"机构：{paper.organization}<br/>" if paper.organization else "")
                 + f"发表时间：{paper.published_at or '未知'}<br/>"
                 + f"摘要：{paper.abstract or '无'}<br/>"
                 f"PDF：{paper.pdf_url or '无'}"

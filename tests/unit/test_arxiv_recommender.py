@@ -28,6 +28,12 @@ class ArxivRecommenderTests(unittest.TestCase):
 
         self.assertEqual(1, len(result.papers))
         self.assertEqual("解码策略优化", result.papers[0].sampled_reason)
+        self.assertEqual(
+            "LLM",
+            result.papers[0].raw_payload["evaluation_prediction"][
+                "primary_research_object"
+            ],
+        )
 
     def test_recommender_drops_clear_negative_benchmark_papers(self) -> None:
         recommender = ArxivRecommender()

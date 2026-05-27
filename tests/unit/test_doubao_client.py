@@ -7,6 +7,7 @@ from pathlib import Path
 from paper_analysis.utils.doubao_client import DoubaoClient
 from paper_analysis.utils.doubao_client import DoubaoUsage
 from paper_analysis.utils.doubao_client import _chunk_list
+from paper_analysis.utils.doubao_client import _extract_multimodal_embedding_vector
 from paper_analysis.utils.doubao_client import _merge_usage
 from paper_analysis.utils.doubao_client import _should_use_multimodal_embedding_api
 
@@ -58,6 +59,13 @@ class DoubaoClientUnitTests(unittest.TestCase):
                 RuntimeError("not found"),
             )
         )
+
+    def test_extract_multimodal_embedding_accepts_sdk_dict_data(self) -> None:
+        class Response:
+            def __init__(self) -> None:
+                self.data = {"embedding": [0.1, 0.2, 0.3]}
+
+        self.assertEqual([0.1, 0.2, 0.3], _extract_multimodal_embedding_vector(Response()))
 
     def test_chunk_list_splits_large_embedding_batches(self) -> None:
         chunks = _chunk_list(list(range(5)), 2)

@@ -1,4 +1,4 @@
-"""Embedding-based route scaffold backed by Doubao embedding prototypes."""
+"""Embedding-based route scaffold backed by AI embedding prototypes."""
 
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ from paper_analysis.api.evaluation_protocol import EvaluationPaper, EvaluationPr
 from paper_analysis.evaluation.ab_protocol import BinaryRoutePrediction
 from paper_analysis.evaluation.errors import RouteNotImplementedError
 from paper_analysis.evaluation.routes.base import BaseBinaryRoute
-from paper_analysis.utils.doubao_client import DoubaoClient, DoubaoEmbeddingResponse
+from paper_analysis.utils.ai_client import AiEmbeddingResponse, FallbackAiClient
 
 
 class EmbeddingClient(Protocol):
@@ -24,8 +24,8 @@ class EmbeddingClient(Protocol):
         texts: list[str],
         *,
         model: str | None = None,
-    ) -> DoubaoEmbeddingResponse:
-        """Embed a batch of texts with the configured Doubao endpoint."""
+    ) -> AiEmbeddingResponse:
+        """Embed a batch of texts with the configured AI provider."""
         ...
 
 
@@ -79,11 +79,11 @@ class EmbeddingRetrieverStubRoute(BaseBinaryRoute):
         """Initialize the route with an embedding client and scoring thresholds."""
         super().__init__(
             route_name="embedding_similarity_binary",
-            algorithm_version="embedding-sim-binary-doubao-v1",
+            algorithm_version="embedding-sim-binary-openrouter-fallback-v1",
             capability_type="embedding_retriever",
             implementation_status="ready",
         )
-        self._client = client or DoubaoClient()
+        self._client = client or FallbackAiClient()
         self._threshold_margin = threshold_margin
         self._min_positive_similarity = min_positive_similarity
         self._heuristic_predictor = EvaluationPredictor(
@@ -98,7 +98,7 @@ class EmbeddingRetrieverStubRoute(BaseBinaryRoute):
         if not embedding_model:
             self.implementation_status = "stub"
             raise RouteNotImplementedError(
-                "未配置 doubao.embedding_model；当前 worktree 的 embedding 路线会回退为 stub。"
+                "未配置 OpenRouter 或 Doubao embedding_model；当前 worktree 的 embedding 路线会回退为 stub。"
             )
 
         positive_response = self._client.embed_texts(
@@ -108,7 +108,7 @@ class EmbeddingRetrieverStubRoute(BaseBinaryRoute):
         if not positive_response.success:
             self.implementation_status = "stub"
             raise RouteNotImplementedError(
-                "Doubao embedding 模型暂不可用："
+                "AI embedding 模型暂不可用："
                 f"{positive_response.error or '未知错误'}"
             )
 
@@ -119,7 +119,7 @@ class EmbeddingRetrieverStubRoute(BaseBinaryRoute):
         if not negative_response.success:
             self.implementation_status = "stub"
             raise RouteNotImplementedError(
-                "Doubao embedding 模型暂不可用："
+                "AI embedding 模型暂不可用："
                 f"{negative_response.error or '未知错误'}"
             )
 
@@ -142,7 +142,7 @@ class EmbeddingRetrieverStubRoute(BaseBinaryRoute):
             model=self._client.resolved_embedding_model,
         )
         if not embedding_response.success:
-            raise RuntimeError(embedding_response.error or "Doubao embedding 调用失败。")
+            raise RuntimeError(embedding_response.error or "AI embedding 调用失败。")
 
         predictions: list[BinaryRoutePrediction] = []
         for paper, vector in zip(papers, embedding_response.vectors, strict=True):
@@ -169,7 +169,7 @@ class EmbeddingRetrieverStubRoute(BaseBinaryRoute):
                     negative_tier="positive",
                     evidence_spans={top_label: [paper.title], "general": [paper.title]},
                     notes=(
-                        "基于 Doubao embedding 与正负原型相似度判定为 positive；"
+                        "基于 AI embedding 与正负原型相似度判定为 positive；"
                         f"top_similarity={top_similarity:.4f}，negative_similarity={negative_similarity:.4f}，"
                         f"margin={margin:.4f}。"
                     ),
@@ -181,7 +181,7 @@ class EmbeddingRetrieverStubRoute(BaseBinaryRoute):
                     negative_tier="negative",
                     evidence_spans={"negative": [paper.title]},
                     notes=(
-                        "基于 Doubao embedding 与负样本原型相似度对比判定为 negative；"
+                        "基于 AI embedding 与负样本原型相似度对比判定为 negative；"
                         f"top_similarity={top_similarity:.4f}，negative_similarity={negative_similarity:.4f}，"
                         f"margin={margin:.4f}。"
                     ),

@@ -19,13 +19,17 @@ py -m paper_analysis.cli.main <namespace> <action> [options]
 
 - `arxiv daily-filter`
   - 样例模式：`arxiv daily-filter --input <json>`
+  - 默认订阅邮件模式：`arxiv daily-filter --subscription-date <YYYY-MM/MM-DD> [--category <term>]... [--max-results <int>]`
   - 订阅 API 模式：`arxiv daily-filter --source-mode subscription-api --subscription-date <YYYY-MM/MM-DD> [--category <term>]... [--max-results <int>]`
+  - 订阅邮件模式：`arxiv daily-filter --source-mode subscription-email --subscription-date <YYYY-MM/MM-DD> [--category <term>]... [--max-results <int>]`
   - 默认行为：先抓取候选，再输出过滤后的推荐结果
 - `arxiv report`
   - 样例模式：`arxiv report --input <json>`
+  - 默认订阅邮件模式：`arxiv report --subscription-date <YYYY-MM/MM-DD> [--category <term>]... [--max-results <int>]`
   - 订阅 API 模式：`arxiv report --source-mode subscription-api --subscription-date <YYYY-MM/MM-DD> [--category <term>]... [--max-results <int>]`
+  - 订阅邮件模式：`arxiv report --source-mode subscription-email --subscription-date <YYYY-MM/MM-DD> [--category <term>]... [--max-results <int>]`
   - 默认行为：先抓取候选，再把过滤后的推荐结果写入基础四件套
-  - 订阅投递模式：`arxiv report --source-mode subscription-api --subscription-date <YYYY-MM/MM-DD> [--category <term>]... [--max-results <int>] --deliver-subscription`
+  - 订阅投递模式：`arxiv report --subscription-date <YYYY-MM/MM-DD> [--category <term>]... [--max-results <int>] --deliver-subscription`
 
 ## quality
 
@@ -57,7 +61,11 @@ py -m paper_analysis.cli.main <namespace> <action> [options]
 - 业务入口只允许 `conference` 和 `arxiv`
 - “推荐 / 排序”不是独立命名空间
 - arXiv CLI 当前默认先过滤，再输出或写出推荐结果；“推荐 / 排序”仍是共享内部阶段能力，不是独立命名空间
-- `arxiv report --deliver-subscription` 只支持 `--source-mode subscription-api`，并在保留基础四件套的同时继续归档运行快照、发送邮件并发布本地订阅站点
+- `arxiv report --deliver-subscription` 只支持 `--source-mode subscription-api` 或 `--source-mode subscription-email`，并在保留基础四件套的同时继续归档运行快照、发送邮件并发布本地订阅站点
+- `subscription-email` 模式使用 Gmail 中的 arXiv 订阅邮件作为主数据源，`--subscription-date` 仍表示论文日期；系统按邮件内每篇论文的 `Date:` 字段做本地日期映射
+- 提供 `--subscription-date` 且未显式设置 `--source-mode` 时，默认使用 `subscription-email`
+- 自然语言路由、E2E 与 CI 默认不要主动补 `--source-mode subscription-api`；官方 API 模式仅用于用户明确要求 API 或排障兼容场景，必须显式传入 `--source-mode subscription-api`
+- 默认使用邮件模式是因为 arXiv 官方 API 在真实联网环境中容易出现 429、长时间无响应或大分页不稳定，而订阅邮件更贴近日常报告的日期语义
 - benchmark / annotation / 网页标注能力已迁到 `third_party/paper_analysis_dataset` 子模块，不属于主仓 CLI 命令面
 - benchmark 正式规范文档位于 `third_party/paper_analysis_dataset/docs/benchmarks/`
 
@@ -66,6 +74,8 @@ py -m paper_analysis.cli.main <namespace> <action> [options]
 以下能力不属于稳定 CLI 命令面，但属于跨仓评测契约的一部分：
 
 - 启动方式：`py -m paper_analysis.api.evaluation_server --port <port>`
+- 默认 AI provider 为 OpenRouter，失败时自动降级到 Doubao
+- 如需强制只用 Doubao：`py -m paper_analysis.api.evaluation_server --port <port> --ai-provider doubao`
 - 健康检查：`GET /healthz`
 - 评测接口：`POST /v1/evaluation/annotate`
 

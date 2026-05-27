@@ -43,6 +43,7 @@ class PipelineIntegrationTests(unittest.TestCase):
 
         self.assertEqual(0, result.returncode)
         self.assertIn("--deliver-subscription", result.stdout)
+        self.assertIn("subscription-email", result.stdout)
         self.assertIn("HTML", result.stdout)
 
     def test_conference_pipeline_returns_ranked_results(self) -> None:
@@ -93,7 +94,9 @@ class PipelineIntegrationTests(unittest.TestCase):
         with patch(
             "paper_analysis.services.arxiv_pipeline.load_subscription_papers",
             return_value=mocked_papers,
-        ) as mocked_loader:
+        ) as mocked_loader, patch(
+            "paper_analysis.services.arxiv_pipeline.enrich_selected_arxiv_papers_with_affiliations",
+        ) as mocked_enricher:
             papers, preferences = ArxivPipeline().run(
                 source_mode="subscription-api",
                 subscription_date="2025-09/09-01",
@@ -110,6 +113,7 @@ class PipelineIntegrationTests(unittest.TestCase):
             categories=["cs.AI"],
             max_results=3,
         )
+        mocked_enricher.assert_called_once_with(papers)
 
     def test_arxiv_pipeline_fetch_all_passes_unbounded_request_to_loader(self) -> None:
         """验证 fetch-all 模式会对订阅抓取层关闭数量截断。"""
@@ -117,7 +121,9 @@ class PipelineIntegrationTests(unittest.TestCase):
         with patch(
             "paper_analysis.services.arxiv_pipeline.load_subscription_papers",
             return_value=[],
-        ) as mocked_loader:
+        ) as mocked_loader, patch(
+            "paper_analysis.services.arxiv_pipeline.enrich_selected_arxiv_papers_with_affiliations",
+        ) as mocked_enricher:
             papers, _preferences = ArxivPipeline().run(
                 source_mode="subscription-api",
                 subscription_date="2025-09/09-01",
@@ -130,6 +136,89 @@ class PipelineIntegrationTests(unittest.TestCase):
             categories=None,
             max_results=None,
         )
+        mocked_enricher.assert_called_once_with([])
+
+    def test_arxiv_pipeline_loads_subscription_email_source(self) -> None:
+        """验证 arXiv pipeline 可从订阅邮件数据源读取目标论文日期的结果。"""
+
+        mocked_papers = [
+            Paper(
+                paper_id="2605.24326",
+                title="ScaleAcross Explorer",
+                abstract="Speculative decoding and draft model acceptance rate for faster LLM serving.",
+                source="arxiv",
+                venue="arXiv",
+                authors=["Ada"],
+                tags=["cs.DC", "cs.AI"],
+                organization="",
+                published_at="2026-05-23",
+            )
+        ]
+
+        with patch(
+            "paper_analysis.services.arxiv_pipeline.load_subscription_email_papers",
+            return_value=mocked_papers,
+        ) as mocked_loader, patch(
+            "paper_analysis.services.arxiv_pipeline.enrich_selected_arxiv_papers_with_affiliations",
+        ) as mocked_enricher:
+            papers, _preferences = ArxivPipeline().run(
+                source_mode="subscription-email",
+                subscription_date="2026-05/05-23",
+                categories=["cs.AI"],
+                max_results=10,
+            )
+
+        self.assertEqual(1, len(papers))
+        self.assertEqual("2605.24326", papers[0].paper_id)
+        mocked_loader.assert_called_once_with(
+            subscription_date="2026-05/05-23",
+            categories=["cs.AI"],
+            max_results=10,
+        )
+        mocked_enricher.assert_called_once_with(papers)
+
+    def test_arxiv_pipeline_enriches_only_selected_subscription_email_papers(self) -> None:
+        """验证机构解析只作用于推荐命中的 arXiv 论文。"""
+
+        selected = Paper(
+            paper_id="2605.24326",
+            title="Speculative Decoding for LLM Serving",
+            abstract="Speculative decoding improves LLM serving latency.",
+            source="arxiv",
+            venue="arXiv",
+            authors=["Ada"],
+            tags=["cs.AI"],
+            organization="",
+            published_at="2026-05-23",
+            pdf_url="https://arxiv.org/pdf/2605.24326",
+        )
+        dropped = Paper(
+            paper_id="2605.24327",
+            title="A Survey of Vision Datasets",
+            abstract="A benchmark dataset survey.",
+            source="arxiv",
+            venue="arXiv",
+            authors=["Bob"],
+            tags=["cs.CV"],
+            organization="",
+            published_at="2026-05-23",
+            pdf_url="https://arxiv.org/pdf/2605.24327",
+        )
+
+        with patch(
+            "paper_analysis.services.arxiv_pipeline.load_subscription_email_papers",
+            return_value=[selected, dropped],
+        ), patch(
+            "paper_analysis.services.arxiv_pipeline.enrich_selected_arxiv_papers_with_affiliations",
+        ) as mocked_enricher:
+            papers, _preferences = ArxivPipeline().run(
+                source_mode="subscription-email",
+                subscription_date="2026-05/05-23",
+                fetch_all=True,
+            )
+
+        self.assertEqual(["2605.24326"], [paper.paper_id for paper in papers])
+        mocked_enricher.assert_called_once_with(papers)
 
     def test_arxiv_report_requires_subscription_date_for_api_mode(self) -> None:
         """验证 subscription-api 模式缺少日期参数时返回结构化失败。"""
@@ -162,6 +251,39 @@ class PipelineIntegrationTests(unittest.TestCase):
         self.assertIn("--subscription-date", result.stdout)
         self.assertNotIn("Traceback", result.stdout + result.stderr)
 
+    def test_arxiv_report_defaults_subscription_date_to_email_source(self) -> None:
+        """验证提供订阅日期但未指定 source-mode 时默认使用订阅邮件源。"""
+
+        env = os.environ.copy()
+        env["PYTHONUTF8"] = "1"
+        env["PYTHONIOENCODING"] = "utf-8"
+        env["PAPER_ANALYSIS_HOME"] = str(ROOT_DIR / "artifacts" / "test-output" / "missing-gmail-config")
+
+        result = subprocess.run(
+            [
+                sys.executable,
+                "-m",
+                "paper_analysis.cli.main",
+                "arxiv",
+                "report",
+                "--subscription-date",
+                "2026-05/05-23",
+            ],
+            cwd=ROOT_DIR,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            env=env,
+            check=False,
+        )
+
+        self.assertEqual(1, result.returncode)
+        self.assertIn("[FAIL] scope=arxiv.report", result.stdout)
+        self.assertIn("Gmail IMAP", result.stdout)
+        self.assertIn("GMAIL_USERNAME", result.stdout)
+        self.assertNotIn("Traceback", result.stdout + result.stderr)
+
     def test_arxiv_report_rejects_fixture_source_for_delivery_mode(self) -> None:
         """验证 deliver-subscription 不能在 fixture 模式下继续执行真实投递。"""
 
@@ -177,8 +299,8 @@ class PipelineIntegrationTests(unittest.TestCase):
                 "arxiv",
                 "report",
                 "--deliver-subscription",
-                "--subscription-date",
-                "2026-04/04-10",
+                "--source-mode",
+                "fixture",
             ],
             cwd=ROOT_DIR,
             capture_output=True,
@@ -191,7 +313,7 @@ class PipelineIntegrationTests(unittest.TestCase):
 
         self.assertEqual(1, result.returncode)
         self.assertIn("[FAIL] scope=arxiv.report", result.stdout)
-        self.assertIn("--source-mode subscription-api", result.stdout)
+        self.assertIn("subscription-email", result.stdout)
         self.assertNotIn("Traceback", result.stdout + result.stderr)
 
     def test_conference_pipeline_reads_paperlists_fixture(self) -> None:
