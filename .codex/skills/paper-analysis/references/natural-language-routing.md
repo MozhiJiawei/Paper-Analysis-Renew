@@ -38,6 +38,38 @@
   - 未给数量时使用 CLI 默认 `--max-results 10`
   - arXiv API 容易出现 429、长时间无响应或大分页不稳定，只有用户明确要求 API 排障时才显式传 `--source-mode subscription-api`
 
+### arXiv 推荐质量审阅
+
+- 用户说：
+  - “帮我审一下今天 arXiv 有没有误推荐或漏推荐”
+  - “用大模型挑战一下这次 arXiv 推荐效果”
+- 优先命令：
+  - `py -m paper_analysis.cli.main arxiv report --subscription-date 2026-05/05-23`
+- 必要追问：
+  - 缺 `subscription-date` 且无法从上下文确定时追问订阅日期
+- 默认处理：
+  - `arxiv report` 在订阅邮件模式下默认生成推荐报告和大模型蓝军审阅
+  - 蓝军结论写回 `artifacts/e2e/arxiv/latest/summary.md` 与 `result.json`
+  - 详细审阅产物写到 `artifacts/reviews/arxiv/latest/summary.md`、`result.json`、`stdout.txt`
+  - 默认复用本次 Gmail 订阅邮件候选全集，不主动补 `--source-mode subscription-api`
+  - 默认使用 OpenRouter `deepseek/deepseek-v4-pro`
+
+### arXiv 数据集手动导入
+
+- 用户说：
+  - “把这天的 arXiv 推荐样本入数据集”
+  - “确认后把 2026-05/05-23 的日更样本导入评测数据集”
+- 优先命令：
+  - `py -m paper_analysis.cli.main arxiv import-dataset --subscription-date 2026-05/05-23`
+- 必要追问：
+  - 缺 `subscription-date` 且无法从上下文确定时追问订阅日期
+- 默认处理：
+  - `arxiv report` 不默认入库
+  - 入库必须通过 `arxiv import-dataset` 显式触发
+  - 手动导入只读取同一个分日目录下的推荐报告和蓝军审阅产物；不存在时直接失败并提示先重跑 `arxiv report --subscription-date ... --fetch-all`
+  - 手动导入会把推荐算法结论、蓝军结论和 ds-v4 边界负例写入数据集
+  - 不主动补 `--source-mode subscription-api`
+
 ### 质量检查 / 回归验证
 
 - 用户说：

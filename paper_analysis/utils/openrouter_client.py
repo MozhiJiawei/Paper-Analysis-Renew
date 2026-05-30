@@ -12,7 +12,7 @@ from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, Self
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
@@ -169,6 +169,22 @@ class OpenRouterClient:
     ) -> Future[dict[str, Any]]:
         """Submit one chat-completion request to the shared executor."""
         return self._get_executor().submit(self._run_chat_sync, messages, stream=stream)
+
+    def close(self) -> None:
+        """Release any worker threads owned by this client."""
+        with self._executor_lock:
+            executor = self._executor
+            self._executor = None
+        if executor is not None:
+            executor.shutdown(wait=True, cancel_futures=False)
+
+    def __enter__(self) -> Self:
+        """Return this client for context-manager use."""
+        return self
+
+    def __exit__(self, exc_type: object, exc: object, tb: object) -> None:
+        """Close worker resources when leaving a context manager."""
+        self.close()
 
     def embed_texts(
         self,

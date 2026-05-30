@@ -37,3 +37,11 @@ def emit_lines(*lines: str) -> None:
     """Write one or more terminal lines without using print()."""
     for line in lines:
         sys.stdout.write(f"{line}\n")
+    sys.stdout.flush()
+
+
+def emit_progress(*lines: str) -> None:
+    """Write progress lines to stderr so stdout stays machine-readable."""
+    for line in lines:
+        sys.stderr.write(f"{line}\n")
+    sys.stderr.flush()

@@ -31,6 +31,7 @@ description: "Use when working in this repository on conference paper filtering,
 - `py -m paper_analysis.cli.main conference --help`
 - `py -m paper_analysis.cli.main arxiv --help`
 - `py -m paper_analysis.cli.main arxiv report --subscription-date 2026-04/04-10 --deliver-subscription`
+- `py -m paper_analysis.cli.main arxiv import-dataset --subscription-date 2026-04/04-10`
 - `py -m paper_analysis.cli.main quality send-test-email`
 - `py -m paper_analysis.cli.main quality lint`
 - `py -m paper_analysis.cli.main quality local-ci`
@@ -42,6 +43,8 @@ description: "Use when working in this repository on conference paper filtering,
 
 - 顶会筛选请求 -> `conference filter` 或 `conference report`
 - arXiv 日更 / 订阅请求 -> `arxiv daily-filter` 或 `arxiv report`
+- arXiv 推荐质量审阅 / 误推荐 / 漏推荐请求 -> 查看 `arxiv report` 每日推荐报告中的“蓝军审阅”段落；详细产物在 `artifacts/reviews/arxiv/latest/`
+- arXiv 日更样本入评测数据集请求 -> `arxiv import-dataset --subscription-date YYYY-MM/MM-DD`
 - arXiv 订阅最小投递闭环请求 -> `arxiv report --subscription-date YYYY-MM/MM-DD --deliver-subscription`
 - 本地检查 / 回归请求 -> `quality local-ci`
 - 邮件通道调试 / 测试邮件请求 -> `quality send-test-email`
@@ -58,6 +61,8 @@ description: "Use when working in this repository on conference paper filtering,
 - 顶会链路优先复用 `conference` 命名空间，不新增 `recommend`
 - arXiv 链路优先复用 `arxiv` 命名空间，不在入口层做新的偏好产品面
 - arXiv 默认先抓取候选，再输出过滤后的推荐结果
+- arXiv 大模型审阅在 `arxiv report` 订阅邮件模式下默认执行，复用本次已加载候选集合和 OpenRouter `deepseek/deepseek-v4-pro`，检查误推荐、边界推荐与漏推荐，并把蓝军结论写回每日推荐报告；日更全量审阅使用 `--fetch-all`
+- arXiv 数据集导入默认不随 `arxiv report` 自动执行；只有显式执行 `arxiv import-dataset` 时才写入子仓数据集
 - arXiv 订阅默认使用 Gmail 订阅邮件；自然语言路由不要主动补 `--source-mode subscription-api`
 - 质量检查默认运行 `quality local-ci`
 - 邮件通道调试默认复用 `quality send-test-email`，不新增 `email` 顶层命名空间
@@ -98,6 +103,11 @@ arXiv 输入模式：
 - 提供 `--subscription-date` 且未显式设置 `--source-mode` 时默认使用 `subscription-email`
 - 默认使用邮件而不是 API，是因为 arXiv API 在真实联网环境中容易出现 429、长时间无响应或大分页不稳定；订阅邮件是每日订阅报告的主事实来源
 - 订阅投递闭环最小参数：`arxiv report --subscription-date YYYY-MM/MM-DD --deliver-subscription`
+- 数据集导入手动参数：`arxiv import-dataset --subscription-date YYYY-MM/MM-DD`
+- 手动导入只读取同一个分日目录下的推荐报告和蓝军审阅产物，不重新抓取 Gmail、不重跑推荐、不重跑蓝军审阅；缺少分日产物时直接报错，提示先重跑 `arxiv report --subscription-date YYYY-MM/MM-DD --fetch-all`
+- 手动导入会把推荐结果、蓝军校验结果、ds-v4 边界负例抽样导入 `third_party/paper_analysis_dataset` 的现有 dataset-native import API
+- 导入产物位于 `artifacts/datasets/arxiv/latest/import-payload.json`；同一篇论文的 notes 必须同时保留推荐算法结论和蓝军结论
+- 不要把数据集导入挂到 `arxiv report` 默认流程上；入库必须是人工确认后的显式操作，避免算法噪音增加人工审阅成本
 
 ## 首读文档
 

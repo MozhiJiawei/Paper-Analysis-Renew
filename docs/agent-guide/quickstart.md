@@ -20,6 +20,7 @@ py -m paper_analysis.cli.main --help
 py -m paper_analysis.cli.main conference report
 py -m paper_analysis.cli.main conference report --venue iclr --year 2025
 py -m paper_analysis.cli.main arxiv report
+py -m paper_analysis.cli.main arxiv import-dataset --subscription-date 2026-04/04-10
 py -m paper_analysis.cli.main arxiv report --subscription-date 2026-04/04-10 --deliver-subscription
 py -m paper_analysis.cli.main quality send-test-email
 py -m paper_analysis.cli.main quality local-ci
@@ -51,6 +52,8 @@ py -m paper_analysis.api.evaluation_server --port 8765
 
 - “帮我筛 ICLR 2025 论文” -> `conference filter` 或 `conference report`
 - “帮我看今天的 arXiv AI 更新” -> `arxiv daily-filter` 或 `arxiv report`
+- “帮我审一下今天 arXiv 有没有误推荐或漏推荐” -> 查看 `arxiv report --subscription-date <YYYY-MM/MM-DD>` 每日推荐报告中的“蓝军审阅”段落，详细审阅产物在 `artifacts/reviews/arxiv/latest/`
+- “把这天的 arXiv 推荐样本入数据集” -> `arxiv import-dataset --subscription-date <YYYY-MM/MM-DD>`
 - “把今天的 arXiv 订阅结果发邮件并更新本地页面” -> `arxiv report --subscription-date <YYYY-MM/MM-DD> --deliver-subscription`
 - “帮我试一下 QQ SMTP 发信” -> `quality send-test-email`
 - “跑一下本地检查” -> `quality local-ci`
@@ -134,6 +137,9 @@ py -m paper_analysis.cli.main conference report --venue iclr --year 2025 --paper
 - CLI 优先
 - “推荐”不是独立产品面
 - arXiv 默认先抓取候选，再输出过滤后的推荐结果
+- arXiv 大模型审阅在 `arxiv report` 订阅邮件模式下默认执行，复用本次已加载候选集合和 OpenRouter `deepseek/deepseek-v4-pro`，并把蓝军结论写回每日推荐报告；日更全量审阅使用 `--fetch-all`
+- arXiv 订阅邮件日更默认不入库；只有显式执行 `arxiv import-dataset --subscription-date <YYYY-MM/MM-DD>` 时，才读取同一个分日目录下的推荐报告与蓝军审阅产物，并把推荐结果、蓝军校验结果、ds-v4 边界负例抽样导入 `third_party/paper_analysis_dataset` 的现有导入 API
+- 手动数据集导入用于人工确认后的样本沉淀，避免推荐算法或蓝军算法噪音直接增加人工审阅成本
 - `--deliver-subscription` 只允许在 `subscription-api` 或 `subscription-email` 模式下执行真实投递
 - `subscription-email` 模式通过 Gmail arXiv 订阅邮件读取论文，`--subscription-date` 仍表示论文日期，系统会按邮件内每篇论文的 `Date:` 字段做本地映射
 - 提供 `--subscription-date` 且未显式设置 `--source-mode` 时，默认使用 `subscription-email`

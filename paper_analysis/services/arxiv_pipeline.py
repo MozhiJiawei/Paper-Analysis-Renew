@@ -16,6 +16,7 @@ from paper_analysis.sources.arxiv.email_loader import load_subscription_email_pa
 from paper_analysis.sources.arxiv.subscription_loader import load_subscription_papers
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
     from pathlib import Path
 
     from paper_analysis.domain.paper import Paper
@@ -36,6 +37,7 @@ class ArxivPipeline:
         papers: list[Paper]
         preferences: PreferenceProfile
         fetched_count: int
+        candidate_papers: list[Paper]
 
     def run(
         self,
@@ -47,6 +49,7 @@ class ArxivPipeline:
         categories: list[str] | None = None,
         max_results: int = 10,
         fetch_all: bool = False,
+        progress: Callable[[str], None] | None = None,
     ) -> tuple[list[Paper], PreferenceProfile]:
         """Load papers and preferences, then cap the result count by user limit."""
         result = self.run_with_details(
@@ -57,6 +60,7 @@ class ArxivPipeline:
             categories=categories,
             max_results=max_results,
             fetch_all=fetch_all,
+            progress=progress,
         )
         return result.papers, result.preferences
 
@@ -70,29 +74,21 @@ class ArxivPipeline:
         categories: list[str] | None = None,
         max_results: int = 10,
         fetch_all: bool = False,
+        progress: Callable[[str], None] | None = None,
     ) -> Result:
         """Load papers and preferences, preserving pre-limit fetch counts."""
-        if source_mode == "subscription-api":
-            if not subscription_date:
-                raise CliInputError("subscription-api 模式必须提供 --subscription-date")
-            paper_records = load_subscription_papers(
-                subscription_date=subscription_date,
-                categories=categories,
-                max_results=None if fetch_all else max_results,
-            )
-        elif source_mode == "subscription-email":
-            if not subscription_date:
-                raise CliInputError("subscription-email 模式必须提供 --subscription-date")
-            paper_records = load_subscription_email_papers(
-                subscription_date=subscription_date,
-                categories=categories,
-                max_results=None if fetch_all else max_results,
-            )
-        else:
-            paper_records = load_papers(
-                papers_path or FIXTURES_DIR / "arxiv" / "sample_daily.json"
-            )
+        paper_records = self._load_records(
+            papers_path=papers_path,
+            source_mode=source_mode,
+            subscription_date=subscription_date,
+            categories=categories,
+            max_results=max_results,
+            fetch_all=fetch_all,
+            progress=progress,
+        )
 
+        _emit_progress(progress, f"[arxiv] fetched {len(paper_records)} candidate papers")
+        _emit_progress(progress, "[arxiv] loading preference profile...")
         preferences = load_preferences(
             preferences_path or FIXTURES_DIR / "preferences" / "sample_preferences.json"
         )
@@ -104,11 +100,62 @@ class ArxivPipeline:
         selected_papers = self.recommender.recommend(
             paper_records,
             limit=recommendation_limit,
+            progress=progress,
         ).papers
         if source_mode in {"subscription-api", "subscription-email"}:
+            _emit_progress(
+                progress,
+                f"[arxiv] enriching affiliations for {len(selected_papers)} selected papers...",
+            )
             enrich_selected_arxiv_papers_with_affiliations(selected_papers)
+            _emit_progress(progress, "[arxiv] affiliation enrichment done")
         return self.Result(
             papers=selected_papers,
             preferences=preferences,
             fetched_count=len(paper_records),
+            candidate_papers=paper_records,
         )
+
+    def _load_records(
+        self,
+        *,
+        papers_path: Path | None,
+        source_mode: str,
+        subscription_date: str | None,
+        categories: list[str] | None,
+        max_results: int,
+        fetch_all: bool,
+        progress: Callable[[str], None] | None,
+    ) -> list[Paper]:
+        """Load candidate papers from the requested arXiv source."""
+        if source_mode == "subscription-api":
+            if not subscription_date:
+                raise CliInputError("subscription-api 模式必须提供 --subscription-date")
+            _emit_progress(
+                progress,
+                f"[arxiv] loading subscription API papers date={subscription_date}...",
+            )
+            return load_subscription_papers(
+                subscription_date=subscription_date,
+                categories=categories,
+                max_results=None if fetch_all else max_results,
+            )
+        if source_mode == "subscription-email":
+            if not subscription_date:
+                raise CliInputError("subscription-email 模式必须提供 --subscription-date")
+            _emit_progress(
+                progress,
+                f"[arxiv] loading Gmail subscription papers date={subscription_date}...",
+            )
+            return load_subscription_email_papers(
+                subscription_date=subscription_date,
+                categories=categories,
+                max_results=None if fetch_all else max_results,
+            )
+        _emit_progress(progress, "[arxiv] loading fixture papers...")
+        return load_papers(papers_path or FIXTURES_DIR / "arxiv" / "sample_daily.json")
+
+
+def _emit_progress(progress: Callable[[str], None] | None, line: str) -> None:
+    if progress:
+        progress(line)

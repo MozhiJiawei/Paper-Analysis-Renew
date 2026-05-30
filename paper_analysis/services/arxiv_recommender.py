@@ -9,6 +9,8 @@ from paper_analysis.api.evaluation_predictor import EvaluationPredictor
 from paper_analysis.api.evaluation_protocol import EvaluationPaper
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     from paper_analysis.domain.paper import Paper
 
 YEAR_PREFIX_LENGTH = 4
@@ -29,19 +31,37 @@ class ArxivRecommender:
         """Store the reusable inference-acceleration predictor."""
         self.predictor = predictor or EvaluationPredictor()
 
-    def recommend(self, candidates: list[Paper], *, limit: int | None = None) -> ArxivRecommendationResult:
+    def recommend(
+        self,
+        candidates: list[Paper],
+        *,
+        limit: int | None = None,
+        progress: Callable[[str], None] | None = None,
+    ) -> ArxivRecommendationResult:
         """Keep only positive inference-acceleration papers and annotate their sublabels."""
         selected: list[Paper] = []
-        for paper in candidates:
+        total = len(candidates)
+        if progress:
+            progress(f"[arxiv] running recommender over {total} candidates...")
+        for index, paper in enumerate(candidates, start=1):
+            if progress and (index == 1 or index % 25 == 0 or index == total):
+                progress(
+                    "[arxiv] recommender progress "
+                    f"{index}/{total}, selected={len(selected)}"
+                )
             evaluation_paper = _to_evaluation_paper(paper)
             prediction = self.predictor.predict(evaluation_paper)
+            paper.raw_payload.setdefault("evaluation_prediction", {}).update(
+                {
+                    "primary_research_object": prediction.primary_research_object,
+                    "preference_labels": prediction.preference_labels,
+                    "negative_tier": prediction.negative_tier,
+                }
+            )
             if prediction.negative_tier != "positive":
                 continue
             sublabel = prediction.preference_labels[0]
             paper.sampled_reason = sublabel
-            paper.raw_payload.setdefault("evaluation_prediction", {})[
-                "primary_research_object"
-            ] = prediction.primary_research_object
             paper.reasons = [
                 f"推理加速子类：{sublabel}",
                 prediction.notes,
@@ -53,6 +73,8 @@ class ArxivRecommender:
         selected.sort(key=lambda item: (item.sampled_reason, item.title))
         if limit is not None:
             selected = selected[:limit]
+        if progress:
+            progress(f"[arxiv] recommender done, recommended={len(selected)}")
         return ArxivRecommendationResult(
             papers=selected,
             algorithm_version=self.predictor.algorithm_version,

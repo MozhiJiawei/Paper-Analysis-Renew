@@ -76,6 +76,27 @@ class OpenRouterClientUnitTests(unittest.TestCase):
             self.assertEqual("openrouter", audit_payload["provider"])
             self.assertEqual("deepseek/deepseek-v4-pro", audit_payload["model"])
 
+    def test_close_releases_lazy_executor(self) -> None:
+        def transport(
+            _url: str,
+            _payload: dict[str, Any],
+            _headers: dict[str, str],
+        ) -> dict[str, Any]:
+            return {"choices": [{"message": {"content": '{"ok": true}'}}]}
+
+        client = OpenRouterClient(
+            transport=transport,
+            api_key="test-key",
+            config_path=Path("C:/does-not-exist/openrouter.yaml"),
+        )
+
+        client.submit([{"role": "user", "content": "ping"}]).result(timeout=5)
+        self.assertIsNotNone(client._executor)  # noqa: SLF001
+
+        client.close()
+
+        self.assertIsNone(client._executor)  # noqa: SLF001
+
     def test_embed_texts_posts_embedding_payload(self) -> None:
         seen: dict[str, Any] = {}
 
