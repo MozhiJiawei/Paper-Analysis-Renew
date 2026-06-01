@@ -8,7 +8,7 @@ import subprocess
 import sys
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING, Any, Protocol, TypedDict
+from typing import TYPE_CHECKING, Any, NotRequired, Protocol, TypedDict
 
 from paper_analysis.cli.common import CliInputError
 from paper_analysis.shared.paths import ARTIFACTS_DIR, ROOT_DIR
@@ -102,6 +102,7 @@ class ArxivDatasetImportPayload(TypedDict):
     source_batch: str
     records: list[dict[str, object]]
     annotations_ai: list[dict[str, object]]
+    boundary_sampling_error: NotRequired[str]
 
 
 @dataclass(slots=True)
@@ -196,9 +197,8 @@ def build_and_import_arxiv_dataset_samples(  # noqa: PLR0913
     records = payload["records"]
     positive_count = sum(1 for item in annotations if item.get("negative_tier") == "positive")
     negative_count = sum(1 for item in annotations if item.get("negative_tier") == "negative")
-    boundary_negative_count = sum(
-        1 for item in annotations if "boundary_negative" in str(item.get("notes", ""))
-    )
+    boundary_negative_count = _count_boundary_negative_annotations(annotations)
+    boundary_sampling_error = payload.get("boundary_sampling_error", "")
     summary = {
         "ok": import_status == "ok",
         "content_date": content_date,
@@ -207,6 +207,7 @@ def build_and_import_arxiv_dataset_samples(  # noqa: PLR0913
         "ai_positive_count": positive_count,
         "ai_negative_count": negative_count,
         "boundary_negative_count": boundary_negative_count,
+        "boundary_sampling_error": boundary_sampling_error,
         "import_status": import_status,
         "import_stdout": import_stdout,
         "import_stderr": import_stderr,
@@ -315,13 +316,18 @@ def build_arxiv_dataset_import_payload(
         max(0, positive_count - negative_count),
     )
     excluded_ids = set(records)
-    boundary_negatives = sample_boundary_negatives(
-        candidate_papers=[
-            paper for paper in candidate_papers if paper.paper_id not in excluded_ids
-        ],
-        target_count=target_boundary_count,
-        client=client,
-    )
+    boundary_sampling_error = ""
+    try:
+        boundary_negatives = sample_boundary_negatives(
+            candidate_papers=[
+                paper for paper in candidate_papers if paper.paper_id not in excluded_ids
+            ],
+            target_count=target_boundary_count,
+            client=client,
+        )
+    except CliInputError as exc:
+        boundary_sampling_error = str(exc)
+        boundary_negatives = []
     for boundary in boundary_negatives:
         boundary_paper = candidate_by_id.get(boundary.paper_id)
         if boundary_paper is None or boundary_paper.paper_id in records:
@@ -361,11 +367,14 @@ def build_arxiv_dataset_import_payload(
             )
         )
 
-    return {
+    payload: ArxivDatasetImportPayload = {
         "source_batch": f"arxiv_daily_review:{content_date}",
         "records": list(records.values()),
         "annotations_ai": list(annotations.values()),
     }
+    if boundary_sampling_error:
+        payload["boundary_sampling_error"] = boundary_sampling_error
+    return payload
 
 
 def sample_boundary_negatives(
@@ -746,15 +755,31 @@ def _extract_year(published_at: str) -> int:
 
 def _render_stdout(summary: dict[str, object]) -> str:
     if summary["import_status"] == "ok":
+        warning = (
+            f" boundary_sampling_error={summary['boundary_sampling_error']}"
+            if summary.get("boundary_sampling_error")
+            else ""
+        )
         return (
             "[OK] arXiv 数据集样本导入完成："
             f"records={summary['record_count']} "
             f"positive={summary['ai_positive_count']} "
             f"negative={summary['ai_negative_count']} "
-            f"boundary_negative={summary['boundary_negative_count']}\n"
+            f"boundary_negative={summary['boundary_negative_count']}"
+            f"{warning}\n"
         )
     return (
         "[WARN] arXiv 数据集样本导入未完成："
         f"status={summary['import_status']} "
         f"stderr={summary['import_stderr']}\n"
+    )
+
+
+def _count_boundary_negative_annotations(annotations: list[dict[str, object]]) -> int:
+    return sum(
+        1
+        for item in annotations
+        if "ds-v4 边界负例抽样" in str(item.get("notes", ""))
+        or "source=boundary_negative" in str(item.get("notes", ""))
+        or "boundary_negative" in str(item.get("notes", ""))
     )

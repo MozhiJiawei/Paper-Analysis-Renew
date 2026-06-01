@@ -11,6 +11,7 @@ from unittest.mock import patch
 
 from paper_analysis.domain.paper import Paper
 from paper_analysis.services.arxiv_dataset_import import (
+    _count_boundary_negative_annotations,
     build_and_import_arxiv_dataset_samples,
     build_arxiv_dataset_import_payload,
 )
@@ -90,6 +91,10 @@ class ArxivDatasetImportTests(unittest.TestCase):
         self.assertEqual(["上下文与缓存优化"], annotations["2605.00003"]["preference_labels"])
         self.assertIn("导入来源：ds-v4 边界负例抽样", boundary_notes)
         self.assertEqual("negative", annotations["2605.00004"]["negative_tier"])
+        self.assertEqual(
+            1,
+            _count_boundary_negative_annotations(list(annotations.values())),
+        )
 
     def test_boundary_negative_count_balances_positive_and_negative_labels(self) -> None:
         positive = _paper("p-positive", "LLM Inference Acceleration", sampled_reason="模型压缩")
@@ -129,6 +134,35 @@ class ArxivDatasetImportTests(unittest.TestCase):
         self.assertEqual(1, len(positives))
         self.assertEqual(1, len(negatives))
         self.assertNotIn("p-boundary-1", {item["paper_id"] for item in annotations})
+
+    def test_boundary_sampler_failure_does_not_block_positive_payload(self) -> None:
+        positive = _paper("p-positive", "LLM Inference Acceleration", sampled_reason="模型压缩")
+        missed = _paper("p-missed", "Agent Routing Optimization")
+        payload = build_arxiv_dataset_import_payload(
+            content_date="2026-05/05-26",
+            candidate_papers=[positive, missed, _paper("p-boundary", "Training Benchmark")],
+            recommended_papers=[positive],
+            review_payload={
+                "recommended_reviews": [
+                    {"paper_id": "p-positive", "verdict": "keep", "reason": "保留"},
+                ],
+                "missed_recommendations": [
+                    {
+                        "paper_id": "p-missed",
+                        "category": "系统与调度优化",
+                        "reason": "Agent 路由优化。",
+                    }
+                ],
+            },
+            client=FailingBoundaryClient(),
+        )
+
+        annotations = {item["paper_id"]: item for item in payload["annotations_ai"]}
+
+        self.assertIn("boundary_sampling_error", payload)
+        self.assertEqual("positive", annotations["p-positive"]["negative_tier"])
+        self.assertEqual("positive", annotations["p-missed"]["negative_tier"])
+        self.assertNotIn("p-boundary", annotations)
 
     def test_build_and_import_writes_payload_through_dataset_api(self) -> None:
         recommended = _paper("p-import-positive", "LLM Inference", sampled_reason="模型压缩")
@@ -250,6 +284,24 @@ class FakeBoundaryClient:
         stream: bool = False,
     ) -> FakeFuture:
         return FakeFuture(self.payload)
+
+
+class FailingBoundaryClient:
+    resolved_chat_model = "fake-failing-boundary"
+
+    def submit(
+        self,
+        messages: list[dict[str, Any]],
+        *,
+        stream: bool = False,
+    ) -> FailingFuture:
+        _ = (messages, stream)
+        return FailingFuture()
+
+
+class FailingFuture:
+    def result(self) -> dict[str, object]:
+        return {"success": False, "error": "temporary ds-v4 parse failure"}
 
 
 @dataclass(slots=True)

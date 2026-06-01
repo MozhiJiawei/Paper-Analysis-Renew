@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import re
+from concurrent.futures import as_completed
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
@@ -27,12 +28,46 @@ DEFAULT_REVIEW_CATEGORIES = [
     "算子与内核优化",
 ]
 RECOMMENDED_VERDICTS = {"keep", "false_positive", "borderline"}
+DEFAULT_REVIEW_CONCURRENCY = 10
 
 DEFAULT_TARGET_PROFILE = """目标偏好是“模型后训练与推理阶段的效率优化”相关论文：
-- 强相关：后训练推理优化、投机推理/speculative decoding、KV cache/上下文缓存/检索缓存、推理服务、吞吐/延迟/显存优化、量化/剪枝/蒸馏/稀疏化、算子/内核/编译加速、Agentic 系统调度与资源优化。
-- 可接受：Diffusion/VLM/检索推荐/通用 ML 系统的推理、服务、缓存、调度或部署效率方法，只要方法可泛化。
-- 不关注：模型预训练、训练数据、训练算法、纯 fine-tuning、纯 benchmark、纯应用、纯安全/隐私/医学/能源/网络场景，除非摘要明确贡献可泛化的推理效率或服务系统方法。
-- 对“预训练更高效”“训练更稳定”“数据质量更好”这类工作要默认判为不相关，除非论文核心贡献明确落在 inference-time/post-training serving optimization。"""
+你是一个“大模型/生成模型/Agent 推理效率论文筛选器”。判为正例必须同时满足：
+1. 研究对象是 LLM、VLM、video diffusion / video generation、VLA、LLM/Agent serving，或直接作用于这些模型推理路径的后训练效率方法；
+2. 核心贡献直接改变推理阶段的执行路径、KV/context/cache、生成解码、模型压缩部署、算子内核、serving 调度，或 Agent runtime；
+3. 摘要明确出现 latency、throughput、memory、cost、token/API calls、prefill/decode speed、GPU utilization、SLO 等效率目标或结果。
+只要任一条件不满足，默认判为负例。
+
+正例方向：
+- 解码策略优化：收 LLM generation decoding 和 diffusion language/video generation 的推理期解码/denoising 加速，例如 speculative decoding、self-speculative decoding、draft model verification、parallel token/block decoding、long-context decoding serving、few-step / fewer-step generation。正例锚点：QuantSpec、MagicDec。
+- 上下文与缓存优化：收 LLM/VLM/video diffusion/VLA 的 KV cache/context cache 压缩、驱逐、复用、稀疏化、补偿或长上下文/长视频推理缓存优化。正例锚点：SmallKV、Inference-Time Hyper-Scaling with KV Cache Compression。
+- 模型压缩：收 LLM/VLM/video diffusion/VLA 推理部署中的后训练量化、剪枝、蒸馏、token merging、极低比特压缩，并且必须指向推理内存/速度/部署收益。正例锚点：ParetoQ。
+- 算子与内核优化：只收服务于目标模型推理的 attention/operator/kernel/compiler/runtime 优化；如果论文主任务是工业仿真、科学计算、视觉任务本身，默认不是正例。
+- 系统与调度优化：只收 LLM serving 或 Agent serving 的 batch/prefill/decode scheduling、placement、resource orchestration、CPU-GPU orchestration、multi-model/multi-tenant serving、session-aware model routing/KV reuse。正例锚点：Prepacking、Fiddler、MuxServe、AgServe。
+
+硬排除：
+- 泛化 test-time reasoning/search/scaling、pass@K、Best-of-N、debate、judge/reward、采样预算准确率权衡，不等于解码优化；除非摘要明确优化 LLM token generation decode path 或 serving latency/cost。
+- 垂直场景 agent 应用、安全线束、地理定位、程序规范合成、游戏/机器人/金融/医学 agent、agent benchmark/evaluation，不等于 Agent serving/runtime 优化。
+- 通用 RAG、文档检索、reranking、搜索增强、知识图谱应用，不等于上下文/缓存优化；除非核心是 LLM runtime 的上下文选择/压缩/缓存复用。
+- 非 LLM/Agent 的一般视觉、3D、工业仿真、科学计算、产品预测默认负例；但 video diffusion / video generation / VLA 的明确推理加速、KV/cache、token pruning/merging、蒸馏、低延迟 rollout、算子内核或服务优化算正例。
+- 纯扩散采样质量改进、纯视觉生成效果改进、纯机器人任务成功率改进默认负例；除非摘要明确给出推理步数、延迟、吞吐、显存、FLOPs 或 deployment/serving 收益。
+- 预训练、训练数据、训练算法、纯 fine-tuning、纯 benchmark/evaluation、纯应用、纯安全/隐私/医学/能源/网络场景默认负例。
+- “新模型结构天然更快/更便宜”“能力更强所以成本下降”“训练更高效”默认负例。
+
+Few-shot 正例：
+- QuantSpec: self-speculative decoding + hierarchical quantized KV cache，提升 long-context LLM decoding speed/memory -> 解码策略优化 / 上下文与缓存优化。
+- MagicDec: speculative decoding for long-context generation serving，突破 latency-throughput tradeoff，2.51x speedup -> 解码策略优化 / 系统与调度优化。
+- SmallKV: small-model assisted KV cache compression for efficient LLM inference，1.75-2.56x throughput -> 上下文与缓存优化。
+- ParetoQ: extremely low-bit LLM quantization，降低模型内存并具备 speedup 潜力 -> 模型压缩。
+- Prepacking/Fiddler/MuxServe/AgServe: LLM/Agent serving 的 prefilling、CPU-GPU orchestration、multi-LLM multiplexing、session-aware routing/KV reuse -> 系统与调度优化。
+
+Few-shot 负例：
+- Uncertainty-Aware Budget Allocation / CPPO / Collaborative Parallel Thinking: test-time reasoning 或 pass@K/search 预算优化，提升准确率但不改变 LLM decoding runtime -> 负例。
+- FinHarness / Agentic Separation Logic / Agents that Matter: 垂直 agent 安全、程序规范、归因评估或 agent 应用优化，不是 Agent serving/runtime 核心部件 -> 负例。
+- LogDx-CI: benchmark/evaluation of log reduction tools，不是一个可直接采用的推理优化方法 -> 负例。
+- SoftCap / Discrete Diffusion stochastic sampling: 只改变随机采样或质量-步数权衡、缺少明确推理部署收益时为负例；但 video diffusion / VLA 的明确低延迟、KV/cache、token pruning/merging、蒸馏、few-step rollout 加速为正例。
+- Industrial crash dynamics low-rank attention: 工业仿真 surrogate/operator learning，不是目标 LLM/Agent 推理优化 -> 负例。
+
+标签归类优先级：LLM speculative/draft/parallel generation decoding 或 diffusion language/video generation denoising/decoding 加速 -> 解码策略优化；LLM/VLM/video diffusion/VLA KV/cache/context compression/reuse -> 上下文与缓存优化；LLM/VLM/video diffusion/VLA quant/pruning/distillation/token merging -> 模型压缩；LLM serving / Agent serving routing/scheduling/resource orchestration -> 系统与调度优化；目标模型 inference kernel/operator/compiler -> 算子与内核优化。"""
 
 
 @dataclass(slots=True)
@@ -46,7 +81,8 @@ class LlmRecommendationReviewRequest:
     candidate_papers: list[Paper]
     target_profile: str = DEFAULT_TARGET_PROFILE
     categories: list[str] | None = None
-    candidate_batch_size: int = 20
+    candidate_batch_size: int = 10
+    review_concurrency: int = DEFAULT_REVIEW_CONCURRENCY
     model: str = DEFAULT_CHAT_MODEL
     progress: Callable[[str], None] | None = None
 
@@ -76,6 +112,8 @@ class LlmRecommendationReviewer:
         """Run an LLM quality review and write JSON/Markdown/stdout artifacts."""
         if request.candidate_batch_size <= 0:
             raise CliInputError("candidate_batch_size 必须大于 0")
+        if request.review_concurrency <= 0:
+            raise CliInputError("review_concurrency 必须大于 0")
         if not request.candidate_papers:
             raise CliInputError("大模型审阅需要候选论文全集")
 
@@ -87,7 +125,10 @@ class LlmRecommendationReviewer:
             row for row in candidate_rows if str(row.get("paper_id", "")) not in recommended_ids
         ]
 
-        client = self.client or OpenRouterClient(chat_model=request.model)
+        client = self.client or OpenRouterClient(
+            chat_model=request.model,
+            concurrency=request.review_concurrency,
+        )
         try:
             return self._review_with_client(
                 request=request,
@@ -126,12 +167,13 @@ class LlmRecommendationReviewer:
         schema_description = _build_schema_description(category_values)
         _emit_progress(
             request.progress,
-            f"[blue-team] reviewing recommended papers count={len(recommended_rows)}...",
+            f"[blue-team] reviewing recommended papers independently count={len(recommended_rows)}...",
         )
         false_positive_payload = self._review_recommended(
             client=client,
             system_prompt=system_prompt,
             schema_description=schema_description,
+            progress=request.progress,
             recommended_rows=recommended_rows,
         )
         _validate_recommended_payload(
@@ -194,29 +236,42 @@ class LlmRecommendationReviewer:
         client: OpenRouterClient,
         system_prompt: str,
         schema_description: str,
+        progress: Callable[[str], None] | None,
         recommended_rows: list[dict[str, Any]],
     ) -> dict[str, Any]:
-        return _call_json(
+        payloads = _call_json_many(
             client,
             [
-                {"role": "system", "content": system_prompt},
-                {
-                    "role": "user",
-                    "content": "\n".join(
-                        [
-                            "请审阅这些“已推荐”论文，判断是否误推荐或边界较弱。",
-                            "必须覆盖每篇论文，verdict 只能是 keep / false_positive / borderline。",
-                            "对预训练、训练数据、纯训练算法、纯应用场景的论文要从严；没有推理/服务/缓存/算子/调度效率贡献就不要 keep。",
-                            schema_description,
-                            json.dumps(
-                                {"recommended_papers": _compact_rows(recommended_rows)},
-                                ensure_ascii=False,
-                            ),
-                        ]
+                (
+                    str(row.get("paper_id", "")),
+                    _build_recommended_messages(
+                        system_prompt=system_prompt,
+                        schema_description=schema_description,
+                        row=row,
                     ),
-                },
+                )
+                for row in recommended_rows
             ],
         )
+        reviews: list[dict[str, Any]] = []
+        for row in recommended_rows:
+            paper_id = str(row.get("paper_id", ""))
+            payload = payloads[paper_id]
+            row_reviews = _list_dicts(payload.get("recommended_reviews"))
+            if len(row_reviews) != 1:
+                raise CliInputError(f"OpenRouter 推荐逐篇审阅返回数量非法：{paper_id}")
+            returned_id = str(row_reviews[0].get("paper_id", ""))
+            if returned_id != paper_id:
+                raise CliInputError(
+                    f"OpenRouter 推荐逐篇审阅 paper_id 不匹配：期望 {paper_id}，实际 {returned_id}"
+                )
+            reviews.append(row_reviews[0])
+            _emit_progress(progress, f"[blue-team] recommended paper reviewed {paper_id}")
+        return {
+            "recommended_reviews": reviews,
+            "missed_recommendations": [],
+            "per_paper_reviews": payloads,
+        }
 
     def _review_omitted_batches(  # noqa: PLR0913
         self,
@@ -248,8 +303,12 @@ class LlmRecommendationReviewer:
                                 f"请审阅第 {batch_index} 批“未推荐”候选论文。",
                                 "只返回明显应该推荐的漏推荐；如果没有漏推荐，missed_recommendations 返回空数组。",
                                 "不要返回已推荐审阅，recommended_reviews 返回空数组。",
-                                "每批最多挑 5 篇。",
-                                "优先找推理阶段、后训练效率、缓存、投机推理、算子内核、Agentic 调度相关漏召回；不要把预训练/训练优化当作漏推荐。",
+                                "每批最多挑 2 篇；宁可漏掉边界样本，也不要扩大正例口径。",
+                                "只返回高置信论文：必须同时满足 target_profile 中的 3 条正例必要条件。",
+                                "优先按 few-shot 正例锚点找同类论文：QuantSpec/MagicDec、SmallKV、ParetoQ、Prepacking/Fiddler/MuxServe/AgServe。",
+                                "遇到 few-shot 负例同类模式必须排除：泛化 test-time reasoning/pass@K/debate/judge、垂直 agent 应用、安全/benchmark、一般视觉/工业仿真。",
+                                "video diffusion / video generation / VLA 若明确优化推理延迟、吞吐、显存、FLOPs、KV/cache、token pruning/merging 或 few-step rollout，可以返回。",
+                                "如果只能说“可泛化”“有加速潜力”“提升效率”但摘要没有明确目标模型推理路径和效率指标，不要返回。",
                                 schema_description,
                                 json.dumps(
                                     {"omitted_candidate_papers": _compact_rows(batch)},
@@ -283,7 +342,7 @@ class LlmRecommendationReviewer:
         if not missed_items:
             return {"verified_missed_recommendations": [], "_raw_content": "", "_usage": None}
         row_by_id = {str(row.get("paper_id", "")): row for row in candidate_rows}
-        candidates = []
+        requests: list[tuple[str, list[dict[str, Any]]]] = []
         for item in missed_items:
             paper_id = str(item.get("paper_id", ""))
             row = row_by_id.get(paper_id)
@@ -293,27 +352,94 @@ class LlmRecommendationReviewer:
             compact_row["first_pass_category"] = item.get("category", "")
             compact_row["first_pass_reason"] = item.get("reason", "")
             compact_row["first_pass_confidence"] = item.get("confidence", "")
-            candidates.append(compact_row)
-        return _call_json(
-            client,
-            [
-                {"role": "system", "content": system_prompt},
-                {
-                    "role": "user",
-                    "content": "\n".join(
-                        [
-                            "下面是第一轮认为可能漏推荐的论文，请做严格二审。",
-                            "只保留明显符合每日推荐偏好的漏推荐：后训练推理优化、speculative decoding、KV/context/cache、LLM/VLM/Diffusion serving、量化/压缩、算子内核、Agentic 系统调度。",
-                            "剔除预训练、训练数据、训练算法、纯 fine-tuning、纯应用、纯综述、纯理论、纯 benchmark；除非摘要明确贡献可泛化的推理阶段效率方法。",
-                            "返回 JSON：verified_missed_recommendations 数组；每项包含 paper_id、category、confidence、reason。",
-                            f"category 只能从这些值中选择：{', '.join(category_values)}。",
-                            "不要为了凑数保留边界项。",
-                            json.dumps({"first_pass_missed": candidates}, ensure_ascii=False),
-                        ]
+            requests.append(
+                (
+                    paper_id,
+                    _build_missed_verification_messages(
+                        system_prompt=system_prompt,
+                        category_values=category_values,
+                        candidate=compact_row,
                     ),
-                },
-            ],
-        )
+                )
+            )
+        payloads = _call_json_many(client, requests)
+        verified: list[dict[str, Any]] = []
+        for paper_id, _messages in requests:
+            items = _list_dicts(payloads[paper_id].get("verified_missed_recommendations"))
+            if len(items) > 1:
+                raise CliInputError(f"OpenRouter 漏推荐逐篇二审返回数量非法：{paper_id}")
+            if items and str(items[0].get("paper_id", "")) != paper_id:
+                raise CliInputError(
+                    "OpenRouter 漏推荐逐篇二审 paper_id 不匹配："
+                    f"期望 {paper_id}，实际 {items[0].get('paper_id', '')}"
+                )
+            verified.extend(items)
+        return {
+            "verified_missed_recommendations": verified,
+            "_raw_content": "",
+            "_usage": None,
+            "per_paper_verifications": payloads,
+        }
+
+
+def _build_recommended_messages(
+    *,
+    system_prompt: str,
+    schema_description: str,
+    row: dict[str, Any],
+) -> list[dict[str, Any]]:
+    return [
+        {"role": "system", "content": system_prompt},
+        {
+            "role": "user",
+            "content": "\n".join(
+                [
+                    "请独立审阅这一篇“已推荐”论文，判断是否误推荐或边界较弱。",
+                    "只允许根据这一篇论文的标题、摘要、标签和推荐理由判断；不要与其他论文比较。",
+                    "recommended_reviews 必须且只能返回这一篇论文一项，verdict 只能是 keep / false_positive / borderline。",
+                    "整体口径从严：没有明确推理阶段、服务阶段、缓存、算子、模型压缩、解码策略或 Agent 系统调度效率贡献，就不要 keep。",
+                    "非 LLM 的 video diffusion / video generation / VLA 推理加速、KV/cache、token pruning/merging、蒸馏或低延迟 rollout 算正例。",
+                    "对预训练、训练数据、纯训练算法、新模型结构本身更快、纯应用场景、纯 benchmark/综述论文默认 false_positive。",
+                    "Agent 系统的模型路由、工具调用、记忆/RAG状态、ReAct/多步推理预算优化可以 keep，归为系统与调度优化；LLM 投机推理、并行解码、测试时采样/搜索预算优化可以 keep，归为解码策略优化。",
+                    schema_description,
+                    json.dumps(
+                        {"recommended_papers": _compact_rows([row])},
+                        ensure_ascii=False,
+                    ),
+                ]
+            ),
+        },
+    ]
+
+
+def _build_missed_verification_messages(
+    *,
+    system_prompt: str,
+    category_values: list[str],
+    candidate: dict[str, Any],
+) -> list[dict[str, Any]]:
+    return [
+        {"role": "system", "content": system_prompt},
+        {
+            "role": "user",
+            "content": "\n".join(
+                [
+                    "下面是第一轮认为可能漏推荐的一篇论文，请做独立严格二审。",
+                    "只允许根据这一篇论文和第一轮理由判断；不要与其他论文比较。",
+                    "二审默认应该驳回；只有证据非常明确时才保留。",
+                    "保留前逐条检查 target_profile 中的 3 条正例必要条件；任一不满足就返回空数组。",
+                    "正例应像 QuantSpec/MagicDec、SmallKV、ParetoQ、Prepacking/Fiddler/MuxServe/AgServe。",
+                    "如果像 UAB/CPPO/CPT、FinHarness/Spec-Agent/Agents that Matter、LogDx-CI、纯质量改进型 SoftCap/Discrete Diffusion、工业仿真 low-rank attention，则返回空数组。",
+                    "video diffusion / video generation / VLA 若明确优化推理延迟、吞吐、显存、FLOPs、KV/cache、token pruning/merging 或 few-step rollout，可以保留。",
+                    "不要被第一轮理由中的“可泛化、效率、成本、Agent、解码、上下文”等词带偏；必须看摘要核心贡献是否落在目标模型推理路径。",
+                    "返回 JSON：verified_missed_recommendations 数组；保留则返回一项，剔除则返回空数组。每项包含 paper_id、category、confidence、reason。",
+                    f"category 只能从这些值中选择：{', '.join(category_values)}。",
+                    "不要为了凑数保留边界项。",
+                    json.dumps({"first_pass_missed": [candidate]}, ensure_ascii=False),
+                ]
+            ),
+        },
+    ]
 
 
 def write_review_failure_artifact(
@@ -511,6 +637,46 @@ def _call_json(client: OpenRouterClient, messages: list[dict[str, Any]]) -> dict
     parsed["_raw_content"] = content
     parsed["_usage"] = response.get("usage")
     return parsed
+
+
+def _call_json_many(
+    client: OpenRouterClient,
+    requests: list[tuple[str, list[dict[str, Any]]]],
+) -> dict[str, dict[str, Any]]:
+    if not requests:
+        return {}
+    seen: set[str] = set()
+    duplicate_keys: set[str] = set()
+    for key, _messages in requests:
+        if key in seen:
+            duplicate_keys.add(key)
+        seen.add(key)
+    if duplicate_keys:
+        raise CliInputError("OpenRouter 并发审阅请求 key 重复：" + ", ".join(sorted(duplicate_keys)))
+
+    futures = {
+        client.submit(messages): key
+        for key, messages in requests
+    }
+    payloads: dict[str, dict[str, Any]] = {}
+    for future in as_completed(futures):
+        key = futures[future]
+        response = future.result()
+        if not response.get("success"):
+            raise CliInputError(
+                f"OpenRouter 审阅失败({key})：{response.get('error') or 'unknown error'}"
+            )
+        content = str(response.get("content", "") or "").strip()
+        try:
+            parsed = json.loads(_extract_json_object(content))
+        except json.JSONDecodeError as exc:
+            raise CliInputError(f"OpenRouter 审阅响应不是合法 JSON({key})：{content[:500]}") from exc
+        if not isinstance(parsed, dict):
+            raise CliInputError(f"OpenRouter 审阅响应顶层不是 JSON object({key})")
+        parsed["_raw_content"] = content
+        parsed["_usage"] = response.get("usage")
+        payloads[key] = parsed
+    return payloads
 
 
 def _extract_json_object(content: str) -> str:

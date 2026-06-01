@@ -11,8 +11,10 @@ from unittest.mock import patch
 from paper_analysis.domain.paper import Paper
 from paper_analysis.cli.common import CliInputError
 from paper_analysis.services.llm_recommendation_reviewer import (
+    DEFAULT_TARGET_PROFILE,
     LlmRecommendationReviewRequest,
 )
+from paper_analysis.services.llm_recommendation_reviewer import _build_system_prompt
 from paper_analysis.services.llm_recommendation_reviewer import LlmRecommendationReviewer
 
 
@@ -24,11 +26,14 @@ class FakeOpenRouterClient:
 
     def __init__(self) -> None:
         self.calls = 0
+        self.messages: list[list[dict[str, object]]] = []
 
     def submit(self, messages: list[dict[str, object]], *, stream: bool = False) -> Future[dict[str, object]]:
         self.calls += 1
+        self.messages.append(messages)
         future: Future[dict[str, object]] = Future()
-        if self.calls == 1:
+        content_text = "\n".join(str(message.get("content", "")) for message in messages)
+        if "recommended_papers" in content_text:
             content = {
                 "recommended_reviews": [
                     {
@@ -40,7 +45,7 @@ class FakeOpenRouterClient:
                 ],
                 "missed_recommendations": [],
             }
-        elif self.calls == 2:
+        elif "omitted_candidate_papers" in content_text and '"paper_id": "p2"' in content_text:
             content = {
                 "recommended_reviews": [],
                 "missed_recommendations": [
@@ -52,7 +57,7 @@ class FakeOpenRouterClient:
                     }
                 ],
             }
-        else:
+        elif "first_pass_missed" in content_text and '"paper_id": "p2"' in content_text:
             content = {
                 "verified_missed_recommendations": [
                     {
@@ -62,6 +67,12 @@ class FakeOpenRouterClient:
                         "reason": "明确优化 LLM serving 调度和吞吐。",
                     }
                 ]
+            }
+        else:
+            content = {
+                "recommended_reviews": [],
+                "missed_recommendations": [],
+                "verified_missed_recommendations": [],
             }
         future.set_result(
             {
@@ -75,6 +86,7 @@ class FakeOpenRouterClient:
 
 class InvalidVerdictOpenRouterClient(FakeOpenRouterClient):
     def submit(self, messages: list[dict[str, object]], *, stream: bool = False) -> Future[dict[str, object]]:
+        self.messages.append(messages)
         future: Future[dict[str, object]] = Future()
         future.set_result(
             {
@@ -102,8 +114,10 @@ class InvalidVerdictOpenRouterClient(FakeOpenRouterClient):
 class InvalidCategoryOpenRouterClient(FakeOpenRouterClient):
     def submit(self, messages: list[dict[str, object]], *, stream: bool = False) -> Future[dict[str, object]]:
         self.calls += 1
+        self.messages.append(messages)
         future: Future[dict[str, object]] = Future()
-        if self.calls == 1:
+        content_text = "\n".join(str(message.get("content", "")) for message in messages)
+        if "recommended_papers" in content_text:
             content = {
                 "recommended_reviews": [
                     {
@@ -147,6 +161,30 @@ class CloseTrackingOpenRouterClient(FakeOpenRouterClient):
 
 
 class LlmRecommendationReviewerTests(unittest.TestCase):
+    def test_system_prompt_preserves_human_agent_and_decoding_preferences(self) -> None:
+        prompt = _build_system_prompt(DEFAULT_TARGET_PROFILE)
+
+        self.assertIn("大模型/生成模型/Agent 推理效率论文筛选器", prompt)
+        self.assertIn("必须同时满足", prompt)
+        self.assertIn("研究对象是 LLM、VLM、video diffusion / video generation、VLA", prompt)
+        self.assertIn("video diffusion / video generation / VLA 的明确推理加速", prompt)
+        self.assertIn("低延迟 rollout", prompt)
+        self.assertIn("系统与调度优化", prompt)
+        self.assertIn("speculative decoding", prompt)
+        self.assertIn("draft model verification", prompt)
+        self.assertIn("解码策略优化", prompt)
+        self.assertIn("新模型结构天然更快", prompt)
+        self.assertIn("QuantSpec", prompt)
+        self.assertIn("MagicDec", prompt)
+        self.assertIn("SmallKV", prompt)
+        self.assertIn("ParetoQ", prompt)
+        self.assertIn("Prepacking/Fiddler/MuxServe/AgServe", prompt)
+        self.assertIn("泛化 test-time reasoning/search", prompt)
+        self.assertIn("FinHarness / Agentic Separation Logic / Agents that Matter", prompt)
+        self.assertIn("LogDx-CI", prompt)
+        self.assertIn("纯扩散采样质量改进", prompt)
+        self.assertIn("Industrial crash dynamics low-rank attention", prompt)
+
     def test_review_writes_false_positive_and_missed_artifacts(self) -> None:
         report_dir = ROOT_DIR / "artifacts" / "test-output" / "arxiv-llm-review-report"
         output_dir = ROOT_DIR / "artifacts" / "test-output" / "arxiv-llm-review-output"
@@ -240,6 +278,44 @@ class LlmRecommendationReviewerTests(unittest.TestCase):
         self.assertEqual("LLM Serving Scheduler", payload["missed_recommendations"][0]["title"])
         self.assertIn("误推荐 1", result.stdout_path.read_text(encoding="utf-8"))
 
+    def test_recommended_and_missed_verification_use_independent_contexts(self) -> None:
+        report_dir, output_dir = _write_report_dirs("independent-context")
+        candidates = [
+            _paper("p1", "Recommended", "A recommended paper."),
+            _paper("p2", "Omitted 1", "An omitted paper."),
+            _paper("p3", "Omitted 2", "Another omitted paper."),
+        ]
+        client = FakeOpenRouterClient()
+
+        LlmRecommendationReviewer(client=cast(Any, client)).review(
+            LlmRecommendationReviewRequest(
+                source_name="arXiv",
+                content_date="2026-05/05-24",
+                report_dir=report_dir,
+                output_dir=output_dir,
+                candidate_batch_size=10,
+                candidate_papers=candidates,
+            )
+        )
+
+        recommended_prompts = [
+            "\n".join(str(message.get("content", "")) for message in messages)
+            for messages in client.messages
+            if "recommended_papers" in "\n".join(str(message.get("content", "")) for message in messages)
+        ]
+        verification_prompts = [
+            "\n".join(str(message.get("content", "")) for message in messages)
+            for messages in client.messages
+            if "first_pass_missed" in "\n".join(str(message.get("content", "")) for message in messages)
+        ]
+
+        self.assertEqual(1, len(recommended_prompts))
+        self.assertIn('"paper_id": "p1"', recommended_prompts[0])
+        self.assertNotIn('"paper_id": "p2"', recommended_prompts[0])
+        self.assertEqual(1, len(verification_prompts))
+        self.assertIn('"paper_id": "p2"', verification_prompts[0])
+        self.assertNotIn('"paper_id": "p3"', verification_prompts[0])
+
     def test_review_emits_batch_progress(self) -> None:
         report_dir = ROOT_DIR / "artifacts" / "test-output" / "arxiv-llm-review-progress-report"
         output_dir = ROOT_DIR / "artifacts" / "test-output" / "arxiv-llm-review-progress-output"
@@ -286,7 +362,8 @@ class LlmRecommendationReviewerTests(unittest.TestCase):
             )
         )
 
-        self.assertIn("[blue-team] reviewing recommended papers count=1...", progress_lines)
+        self.assertIn("[blue-team] reviewing recommended papers independently count=1...", progress_lines)
+        self.assertIn("[blue-team] recommended paper reviewed p1", progress_lines)
         self.assertIn("[blue-team] reviewing omitted batch 1/2, size=1...", progress_lines)
         self.assertIn("[blue-team] reviewing omitted batch 2/2, size=1...", progress_lines)
         self.assertTrue(any(line.startswith("[blue-team] done ") for line in progress_lines))
