@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from concurrent.futures import Future
 import unittest
 
 from paper_analysis.api.evaluation_predictor import EvaluationPredictor
@@ -9,6 +10,34 @@ from paper_analysis.api.evaluation_protocol import (
     EvaluationProtocolError,
     aggregate_primary_research_object,
 )
+
+
+class _FakeAiClient:
+    @property
+    def resolved_api_key(self) -> str:
+        return "fake-key"
+
+    def submit(
+        self,
+        messages: list[dict[str, object]],
+        *,
+        stream: bool = False,
+    ) -> Future[dict[str, object]]:
+        future: Future[dict[str, object]] = Future()
+        future.set_result(
+            {
+                "content": (
+                    '{"broad_positive": true, "strict_positive": false, '
+                    '"label": "解码策略优化", "reason": "边界相关但证据不够强"}'
+                )
+            }
+        )
+        return future
+
+
+class _FakeReviewPredictor(EvaluationPredictor):
+    def _get_ai_client(self) -> _FakeAiClient:
+        return _FakeAiClient()
 
 
 class EvaluationApiUnitTests(unittest.TestCase):
@@ -48,6 +77,28 @@ class EvaluationApiUnitTests(unittest.TestCase):
 
         self.assertEqual("positive", prediction.negative_tier)
         self.assertEqual(["模型压缩"], prediction.preference_labels)
+
+    def test_llm_review_returns_broad_and_strict_recommendation_layers(self) -> None:
+        paper = EvaluationPaper(
+            paper_id="paper-llm-layer-1",
+            title="Speculative Decoding for Efficient LLM Inference",
+            abstract="This speculative decoding method improves draft acceptance rate.",
+            authors=["Alice"],
+            venue="ICLR 2026",
+            year=2026,
+            source="conference",
+            source_path="tests.json",
+            keywords=["speculative decoding"],
+        )
+        predictor = _FakeReviewPredictor(llm_hard_case_review=True)
+
+        prediction = predictor.predict(paper)
+
+        self.assertEqual("negative", prediction.negative_tier)
+        self.assertEqual([], prediction.preference_labels)
+        self.assertEqual("positive", prediction.broad_negative_tier)
+        self.assertEqual(["解码策略优化"], prediction.broad_preference_labels)
+        self.assertEqual("broad_positive", prediction.recommendation_tier)
 
     def test_predictor_prioritizes_vlm_over_language_model_keywords(self) -> None:
         paper = EvaluationPaper(

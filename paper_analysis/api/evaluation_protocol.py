@@ -239,6 +239,9 @@ class EvaluationPrediction:
     negative_tier: str
     evidence_spans: dict[str, list[str]]
     notes: str = ""
+    broad_negative_tier: str | None = None
+    broad_preference_labels: list[str] | None = None
+    recommendation_tier: str = ""
 
     def __post_init__(self) -> None:
         """Normalize and validate prediction fields after construction."""
@@ -256,12 +259,43 @@ class EvaluationPrediction:
         )
         self.evidence_spans = _as_evidence_spans(self.evidence_spans)
         self.notes = _as_text("prediction.notes", self.notes, required=False)
+        self.broad_negative_tier = _as_text(
+            "prediction.broad_negative_tier",
+            self.broad_negative_tier or self.negative_tier,
+        )
+        self.broad_preference_labels = _as_text_list(
+            "prediction.broad_preference_labels",
+            self.broad_preference_labels
+            if self.broad_preference_labels is not None
+            else self.preference_labels,
+        )
+        self.recommendation_tier = _as_text(
+            "prediction.recommendation_tier",
+            self.recommendation_tier or _derive_recommendation_tier(
+                broad_negative_tier=self.broad_negative_tier,
+                strict_negative_tier=self.negative_tier,
+            ),
+        )
         validate_annotation_fields(
             primary_research_object=self.primary_research_object,
             preference_labels=self.preference_labels,
             negative_tier=self.negative_tier,
             evidence_spans=self.evidence_spans,
         )
+        validate_annotation_fields(
+            primary_research_object=self.primary_research_object,
+            preference_labels=self.broad_preference_labels,
+            negative_tier=self.broad_negative_tier,
+            evidence_spans=self.evidence_spans,
+        )
+        if self.recommendation_tier not in {
+            "negative",
+            "broad_positive",
+            "strict_positive",
+        }:
+            raise EvaluationProtocolError(
+                f"recommendation_tier 非法：{self.recommendation_tier}"
+            )
 
     def to_dict(self) -> dict[str, object]:
         """Serialize the prediction into the public response shape."""
@@ -271,7 +305,22 @@ class EvaluationPrediction:
             "negative_tier": self.negative_tier,
             "evidence_spans": self.evidence_spans,
             "notes": self.notes,
+            "broad_negative_tier": self.broad_negative_tier,
+            "broad_preference_labels": self.broad_preference_labels,
+            "recommendation_tier": self.recommendation_tier,
         }
+
+
+def _derive_recommendation_tier(
+    *,
+    broad_negative_tier: str,
+    strict_negative_tier: str,
+) -> str:
+    if strict_negative_tier == "positive":
+        return "strict_positive"
+    if broad_negative_tier == "positive":
+        return "broad_positive"
+    return "negative"
 
 
 @dataclass(slots=True)

@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import json
 import sys
+import time
 from argparse import ArgumentParser
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
@@ -17,6 +18,8 @@ from paper_analysis.api.evaluation_protocol import (
     EvaluationResponse,
 )
 from paper_analysis.shared.encoding import configure_utf8_stdio
+
+BATCH_PROGRESS_INTERVAL = 5
 
 
 class EvaluationRequestHandler(BaseHTTPRequestHandler):
@@ -47,6 +50,12 @@ class EvaluationRequestHandler(BaseHTTPRequestHandler):
         try:
             payload = self._read_json_body()
             batch_request = EvaluationBatchRequest.from_dict(payload)
+            _emit_progress_line(
+                "batch_received",
+                path=self.path,
+                request_count=len(batch_request.requests),
+                algorithm_version=self.predictor.algorithm_version,
+            )
             responses = self._predict_batch(batch_request)
             response = EvaluationBatchResponse(responses=responses)
         except json.JSONDecodeError:
@@ -78,19 +87,73 @@ class EvaluationRequestHandler(BaseHTTPRequestHandler):
         self,
         batch_request: EvaluationBatchRequest,
     ) -> list[EvaluationResponse]:
-        with ThreadPoolExecutor(max_workers=len(batch_request.requests)) as executor:
-            futures = [
-                executor.submit(self.predictor.predict, request.paper)
-                for request in batch_request.requests
+        started_at = time.perf_counter()
+        request_count = len(batch_request.requests)
+
+        def elapsed_ms() -> int:
+            return int((time.perf_counter() - started_at) * 1000)
+
+        _emit_progress_line(
+            "batch_predict_start",
+            request_count=request_count,
+            algorithm_version=self.predictor.algorithm_version,
+        )
+        try:
+            responses: list[EvaluationResponse | None] = [None] * request_count
+            with ThreadPoolExecutor(max_workers=request_count) as executor:
+                future_indexes = {
+                    executor.submit(self.predictor.predict, request.paper): index
+                    for index, request in enumerate(batch_request.requests)
+                }
+                for completed_count, future in enumerate(as_completed(future_indexes), start=1):
+                    index = future_indexes[future]
+                    request = batch_request.requests[index]
+                    responses[index] = EvaluationResponse(
+                        request_id=request.request_id,
+                        prediction=future.result(),
+                        algorithm_version=self.predictor.algorithm_version,
+                    )
+                    self._emit_batch_progress(
+                        completed_count=completed_count,
+                        request_count=request_count,
+                        elapsed_ms=elapsed_ms(),
+                    )
+            resolved_responses = [
+                response for response in responses if response is not None
             ]
-        return [
-            EvaluationResponse(
-                request_id=request.request_id,
-                prediction=future.result(),
+        except Exception as exc:
+            _emit_progress_line(
+                "batch_predict_failed",
+                request_count=request_count,
+                duration_ms=elapsed_ms(),
                 algorithm_version=self.predictor.algorithm_version,
+                error=str(exc),
             )
-            for request, future in zip(batch_request.requests, futures, strict=True)
-        ]
+            raise
+        _emit_progress_line(
+            "batch_predict_done",
+            request_count=request_count,
+            duration_ms=elapsed_ms(),
+            algorithm_version=self.predictor.algorithm_version,
+        )
+        return resolved_responses
+
+    def _emit_batch_progress(
+        self,
+        *,
+        completed_count: int,
+        request_count: int,
+        elapsed_ms: int,
+    ) -> None:
+        if completed_count < request_count and completed_count % BATCH_PROGRESS_INTERVAL != 0:
+            return
+        _emit_progress_line(
+            "batch_predict_progress",
+            completed_count=completed_count,
+            request_count=request_count,
+            duration_ms=elapsed_ms,
+            algorithm_version=self.predictor.algorithm_version,
+        )
 
     def _write_json(self, status: HTTPStatus, payload: dict[str, object]) -> None:
         body = json.dumps(payload, ensure_ascii=False, indent=2).encode("utf-8")
@@ -123,12 +186,19 @@ def build_parser() -> ArgumentParser:
     return parser
 
 
+def _emit_progress_line(event: str, **payload: object) -> None:
+    line_payload = {"component": "evaluation_api", "event": event, **payload}
+    sys.stdout.write("[progress] " + json.dumps(line_payload, ensure_ascii=False) + "\n")
+    sys.stdout.flush()
+
+
 def main() -> None:
     """Start the threaded evaluation API server."""
     configure_utf8_stdio()
     args = build_parser().parse_args()
     EvaluationRequestHandler.predictor = EvaluationPredictor(
         algorithm_version=args.algorithm_version,
+        llm_hard_case_review=True,
         ai_provider=args.ai_provider,
     )
     server = ThreadingHTTPServer((args.host, args.port), EvaluationRequestHandler)
@@ -145,6 +215,7 @@ def main() -> None:
         )
         + "\n"
     )
+    sys.stdout.flush()
     try:
         server.serve_forever()
     except KeyboardInterrupt:

@@ -56,6 +56,10 @@ class ArxivRecommender:
                     "primary_research_object": prediction.primary_research_object,
                     "preference_labels": prediction.preference_labels,
                     "negative_tier": prediction.negative_tier,
+                    "broad_preference_labels": prediction.broad_preference_labels,
+                    "broad_negative_tier": prediction.broad_negative_tier,
+                    "recommendation_tier": prediction.recommendation_tier,
+                    "algorithm_version": self.predictor.algorithm_version,
                 }
             )
             if prediction.negative_tier != "positive":

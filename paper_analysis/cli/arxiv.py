@@ -7,6 +7,7 @@ import shutil
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from paper_analysis.api.evaluation_predictor import EvaluationPredictor
 from paper_analysis.cli.common import CliInputError, emit_lines, emit_progress, print_cli_error
 from paper_analysis.domain.delivery_run import SubscriptionDeliveryRequest
 from paper_analysis.domain.email_delivery import EmailConfigError
@@ -16,6 +17,7 @@ from paper_analysis.services.arxiv_dataset_import import (
     build_and_import_arxiv_dataset_samples,
 )
 from paper_analysis.services.arxiv_pipeline import ArxivPipeline
+from paper_analysis.services.arxiv_recommender import ArxivRecommender
 from paper_analysis.services.arxiv_subscription_delivery import deliver_subscription_run
 from paper_analysis.services.llm_recommendation_reviewer import (
     LlmRecommendationReviewer,
@@ -138,7 +140,11 @@ def handle_report(args: argparse.Namespace) -> int:
         return delivery_error
 
     try:
-        result = ArxivPipeline().run_with_details(
+        result = ArxivPipeline(
+            recommender=ArxivRecommender(
+                predictor=EvaluationPredictor(llm_hard_case_review=True)
+            )
+        ).run_with_details(
             args.input,
             args.preferences,
             source_mode=args.source_mode,
@@ -167,6 +173,11 @@ def handle_report(args: argparse.Namespace) -> int:
         report_json_path=artifacts["json"],
         candidate_papers=result.candidate_papers,
     )
+    _attach_recommendation_layers_to_report(
+        report_artifacts=artifacts,
+        candidate_papers=result.candidate_papers,
+    )
+    _snapshot_red_team_report(report_dir)
     review_result = _write_default_review_artifacts(
         args=args,
         report_dir=report_dir,
@@ -295,6 +306,162 @@ def _attach_candidate_papers_to_report(
     )
 
 
+def _attach_recommendation_layers_to_report(
+    *,
+    report_artifacts: dict[str, Path],
+    candidate_papers: list[Paper],
+) -> None:
+    summary = _build_recommendation_layer_summary(candidate_papers)
+    _append_recommendation_layer_markdown(report_artifacts["markdown"], summary)
+    _append_recommendation_layer_stdout(report_artifacts["stdout"], summary)
+    _merge_recommendation_layer_json(
+        report_artifacts["json"],
+        summary=summary,
+        candidate_papers=candidate_papers,
+    )
+
+
+def _build_recommendation_layer_summary(candidate_papers: list[Paper]) -> dict[str, object]:
+    analyzed_count = len(candidate_papers)
+    broad_candidates = [
+        paper for paper in candidate_papers if _prediction_tier(paper) in {"broad_positive", "strict_positive"}
+    ]
+    strict_candidates = [
+        paper for paper in candidate_papers if _prediction_tier(paper) == "strict_positive"
+    ]
+    broad_only_candidates = [
+        paper for paper in candidate_papers if _prediction_tier(paper) == "broad_positive"
+    ]
+    return {
+        "selection_policy": (
+            "日报推荐只采用 strict_positive；broad_positive 仅作为高召回候选，"
+            "用于人工抽检、数据集沉淀和后续误差分析。"
+        ),
+        "analyzed_count": analyzed_count,
+        "broad_positive_count": len(broad_candidates),
+        "strict_positive_count": len(strict_candidates),
+        "broad_only_count": len(broad_only_candidates),
+        "broad_positive_rate": _format_rate(len(broad_candidates), analyzed_count),
+        "strict_positive_rate": _format_rate(len(strict_candidates), analyzed_count),
+        "broad_only_rate": _format_rate(len(broad_only_candidates), analyzed_count),
+        "broad_by_label": _count_prediction_labels(broad_candidates, field_name="broad_preference_labels"),
+        "strict_by_label": _count_prediction_labels(strict_candidates, field_name="preference_labels"),
+    }
+
+
+def _append_recommendation_layer_markdown(
+    markdown_path: Path,
+    summary: dict[str, object],
+) -> None:
+    lines = [
+        "",
+        "## 分层推荐口径",
+        "",
+        f"- 选择策略：{summary['selection_policy']}",
+        f"- 分析候选：{summary['analyzed_count']}",
+        (
+            "- broad 高召回候选："
+            f"{summary['broad_positive_count']}（{summary['broad_positive_rate']}）"
+        ),
+        (
+            "- strict 日报推荐："
+            f"{summary['strict_positive_count']}（{summary['strict_positive_rate']}）"
+        ),
+        f"- broad-only 待抽检：{summary['broad_only_count']}（{summary['broad_only_rate']}）",
+        "",
+        "### broad 子类分布",
+        "",
+        *_format_distribution_lines(summary["broad_by_label"]),
+        "",
+        "### strict 子类分布",
+        "",
+        *_format_distribution_lines(summary["strict_by_label"]),
+        "",
+    ]
+    with markdown_path.open("a", encoding="utf-8") as handle:
+        handle.write("\n".join(lines))
+
+
+def _append_recommendation_layer_stdout(
+    stdout_path: Path,
+    summary: dict[str, object],
+) -> None:
+    line = (
+        "[OK] 分层推荐："
+        f"broad={summary['broad_positive_count']}，"
+        f"strict={summary['strict_positive_count']}，"
+        f"broad_only={summary['broad_only_count']}\n"
+    )
+    with stdout_path.open("a", encoding="utf-8") as handle:
+        handle.write(line)
+
+
+def _merge_recommendation_layer_json(
+    json_path: Path,
+    *,
+    summary: dict[str, object],
+    candidate_papers: list[Paper],
+) -> None:
+    try:
+        payload = json.loads(json_path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        return
+    if not isinstance(payload, dict):
+        return
+    payload["recommendation_layers"] = summary
+    payload["broad_candidate_papers"] = serialize_papers(
+        [
+            paper
+            for paper in candidate_papers
+            if _prediction_tier(paper) in {"broad_positive", "strict_positive"}
+        ]
+    )
+    payload["broad_only_candidate_papers"] = serialize_papers(
+        [paper for paper in candidate_papers if _prediction_tier(paper) == "broad_positive"]
+    )
+    json_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def _prediction_tier(paper: Paper) -> str:
+    prediction = paper.raw_payload.get("evaluation_prediction")
+    if not isinstance(prediction, dict):
+        return "negative"
+    tier = str(prediction.get("recommendation_tier", "") or "").strip()
+    if tier:
+        return tier
+    if prediction.get("negative_tier") == "positive":
+        return "strict_positive"
+    if prediction.get("broad_negative_tier") == "positive":
+        return "broad_positive"
+    return "negative"
+
+
+def _count_prediction_labels(papers: list[Paper], *, field_name: str) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for paper in papers:
+        prediction = paper.raw_payload.get("evaluation_prediction")
+        if not isinstance(prediction, dict):
+            continue
+        labels = prediction.get(field_name)
+        if not isinstance(labels, list):
+            continue
+        for raw_label in labels:
+            label = str(raw_label).strip()
+            if label:
+                counts[label] = counts.get(label, 0) + 1
+    return dict(sorted(counts.items(), key=lambda item: (-item[1], item[0])))
+
+
+def _format_rate(count: int, total: int) -> str:
+    return f"{count / total:.1%}" if total else "0.0%"
+
+
+def _format_distribution_lines(distribution: object) -> list[str]:
+    if not isinstance(distribution, dict) or not distribution:
+        return ["- 无"]
+    return [f"- {key}：{value}" for key, value in distribution.items()]
+
+
 def _archive_arxiv_report_run(
     *,
     content_date: str | None,
@@ -327,6 +494,19 @@ def _copy_review_artifacts_into_daily_dir(review_dir: Path, daily_dir: Path) -> 
         source_path = review_dir / source_name
         if source_path.exists():
             shutil.copyfile(source_path, daily_dir / target_name)
+
+
+def _snapshot_red_team_report(report_dir: Path) -> None:
+    files = {
+        "summary.md": "red-team-summary.md",
+        "result.json": "red-team-result.json",
+        "stdout.txt": "red-team-stdout.txt",
+        "result.csv": "red-team-result.csv",
+    }
+    for source_name, target_name in files.items():
+        source_path = report_dir / source_name
+        if source_path.exists():
+            shutil.copyfile(source_path, report_dir / target_name)
 
 
 def _dated_report_dir(content_date: str) -> Path:
@@ -540,85 +720,245 @@ def _append_blue_team_review_to_report(
     if not isinstance(review_payload, dict):
         return
 
-    _append_blue_team_markdown(report_artifacts["markdown"], review_payload)
-    _append_blue_team_stdout(report_artifacts["stdout"], review_payload)
-    _merge_blue_team_json(report_artifacts["json"], review_payload)
-
-
-def _append_blue_team_markdown(markdown_path: Path, review_payload: dict[str, object]) -> None:
-    lines = ["", "## 蓝军审阅", ""]
-    if review_payload.get("status") == "failed":
-        lines.extend(
-            [
-                "- 状态：失败",
-                f"- 失败原因：{review_payload.get('error', 'unknown error')}",
-                "- 下一步：检查 OpenRouter 配置或模型响应后重新运行 arxiv report。",
-                "",
-            ]
-        )
-    else:
-        lines.extend(
-            [
-                f"- 模型：{review_payload.get('model', '')}",
-                f"- 误推荐：{review_payload.get('false_positive_count', 0)}",
-                f"- 边界推荐：{review_payload.get('borderline_count', 0)}",
-                f"- 漏推荐：{review_payload.get('missed_count', 0)}",
-                "",
-                "### 疑似误推荐",
-                "",
-                *_format_blue_team_items(
-                    review_payload.get("false_positives"),
-                    include_category=False,
-                ),
-                "",
-                "### 边界推荐",
-                "",
-                *_format_blue_team_items(
-                    review_payload.get("borderline_recommendations"),
-                    include_category=False,
-                ),
-                "",
-                "### 疑似漏推荐",
-                "",
-                *_format_blue_team_items(
-                    review_payload.get("missed_recommendations"),
-                    include_category=True,
-                ),
-                "",
-                f"详细审阅产物：`{_review_output_dir() / 'summary.md'}`",
-                "",
-            ]
-        )
-    with markdown_path.open("a", encoding="utf-8") as handle:
-        handle.write("\n".join(lines))
-
-
-def _append_blue_team_stdout(stdout_path: Path, review_payload: dict[str, object]) -> None:
-    if review_payload.get("status") == "failed":
-        line = f"[WARN] 蓝军审阅失败：{review_payload.get('error', 'unknown error')}\n"
-    else:
-        line = (
-            "[OK] 蓝军审阅："
-            f"误推荐 {review_payload.get('false_positive_count', 0)}，"
-            f"边界 {review_payload.get('borderline_count', 0)}，"
-            f"漏推荐 {review_payload.get('missed_count', 0)}\n"
-        )
-    with stdout_path.open("a", encoding="utf-8") as handle:
-        handle.write(line)
-
-
-def _merge_blue_team_json(json_path: Path, review_payload: dict[str, object]) -> None:
+    red_json_path = report_artifacts["json"].with_name("red-team-result.json")
     try:
-        report_payload = json.loads(json_path.read_text(encoding="utf-8"))
+        red_report_payload = json.loads(red_json_path.read_text(encoding="utf-8"))
     except json.JSONDecodeError:
         return
-    if not isinstance(report_payload, dict):
+    if not isinstance(red_report_payload, dict):
         return
-    report_payload["blue_team_review"] = _compact_blue_team_payload(review_payload)
-    json_path.write_text(
-        json.dumps(report_payload, ensure_ascii=False, indent=2),
+
+    sections = _build_merged_recommendation_sections(red_report_payload, review_payload)
+    report_artifacts["markdown"].write_text(
+        _render_merged_report_markdown(
+            red_report_payload=red_report_payload,
+            review_payload=review_payload,
+            sections=sections,
+        ),
         encoding="utf-8",
     )
+    report_artifacts["stdout"].write_text(
+        _render_merged_report_stdout(red_report_payload, review_payload, sections),
+        encoding="utf-8",
+    )
+    merged_payload = dict(red_report_payload)
+    merged_payload["report_kind"] = "merged_red_blue"
+    merged_payload["red_team_report_artifact"] = str(red_json_path)
+    merged_payload["blue_team_review"] = _compact_blue_team_payload(review_payload)
+    merged_payload["blue_team_review_artifact"] = str(review_json_path)
+    merged_payload["merged_recommendation_sections"] = sections
+    report_artifacts["json"].write_text(
+        json.dumps(merged_payload, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+
+
+def _build_merged_recommendation_sections(
+    red_report_payload: dict[str, object],
+    review_payload: dict[str, object],
+) -> dict[str, list[dict[str, object]]]:
+    red_rows = _list_dicts(red_report_payload.get("papers"))
+    red_by_id = {str(row.get("paper_id", "")): row for row in red_rows}
+    borderline = _list_dicts(review_payload.get("borderline_recommendations"))
+    borderline_ids = {str(item.get("paper_id", "")) for item in borderline}
+    false_positive = _list_dicts(review_payload.get("false_positives"))
+    false_positive_ids = {str(item.get("paper_id", "")) for item in false_positive}
+
+    shared_recommendations = [
+        _merged_red_blue_item(row, review_payload)
+        for row in red_rows
+        if str(row.get("paper_id", "")) not in borderline_ids
+        and str(row.get("paper_id", "")) not in false_positive_ids
+    ]
+    red_borderline = [
+        _merged_red_blue_item(red_by_id.get(str(item.get("paper_id", "")), {}), review_payload)
+        for item in borderline
+    ]
+    missed = [
+        _merged_missed_item(item)
+        for item in _list_dicts(review_payload.get("missed_recommendations"))
+    ]
+    return {
+        "blue_and_red_recommendations": shared_recommendations,
+        "red_recommendations_blue_borderline": red_borderline,
+        "blue_missed_recommendations": missed,
+    }
+
+
+def _merged_red_blue_item(
+    red_row: dict[str, object],
+    review_payload: dict[str, object],
+) -> dict[str, object]:
+    paper_id = str(red_row.get("paper_id", ""))
+    review_item = _review_item_by_id(review_payload, paper_id)
+    return {
+        "paper_id": paper_id,
+        "title": red_row.get("title", ""),
+        "category": red_row.get("sampled_reason", ""),
+        "red_reason": _compact_red_reason(red_row),
+        "blue_verdict": review_item.get("verdict", "keep") if review_item else "keep",
+        "blue_reason": review_item.get("reason", "") if review_item else "",
+        "confidence": review_item.get("confidence", "") if review_item else "",
+        "pdf_url": red_row.get("pdf_url", ""),
+    }
+
+
+def _merged_missed_item(item: dict[str, object]) -> dict[str, object]:
+    return {
+        "paper_id": item.get("paper_id", ""),
+        "title": item.get("title", ""),
+        "category": item.get("category", ""),
+        "blue_reason": item.get("reason", ""),
+        "confidence": item.get("confidence", ""),
+    }
+
+
+def _review_item_by_id(
+    review_payload: dict[str, object],
+    paper_id: str,
+) -> dict[str, object]:
+    for item in _list_dicts(review_payload.get("recommended_reviews")):
+        if str(item.get("paper_id", "")) == paper_id:
+            return item
+    return {}
+
+
+def _compact_red_reason(row: dict[str, object]) -> str:
+    reasons = row.get("reasons")
+    if not isinstance(reasons, list):
+        return ""
+    compact = [
+        str(reason).strip()
+        for reason in reasons
+        if str(reason).strip()
+        and not str(reason).startswith("基于标题、摘要与关键词宽召回主标签为")
+    ]
+    return "；".join(compact[:2])
+
+
+def _render_merged_report_markdown(
+    *,
+    red_report_payload: dict[str, object],
+    review_payload: dict[str, object],
+    sections: dict[str, list[dict[str, object]]],
+) -> str:
+    if review_payload.get("status") == "failed":
+        return _render_failed_merged_markdown(red_report_payload, review_payload)
+    lines = [
+        "# arXiv 融合推荐报告",
+        "",
+        f"- 内容日期：{review_payload.get('content_date', '')}",
+        f"- 红军推荐：{len(_list_dicts(red_report_payload.get('papers')))}",
+        f"- 蓝军模型：{review_payload.get('model', '')}",
+        f"- 蓝军误推荐：{review_payload.get('false_positive_count', 0)}",
+        f"- 蓝军存疑：{review_payload.get('borderline_count', 0)}",
+        f"- 蓝军漏推荐：{review_payload.get('missed_count', 0)}",
+        "",
+        "## 1. 蓝军推荐 + 红军推荐",
+        "",
+        *_render_merged_items(sections["blue_and_red_recommendations"], include_blue_reason=True),
+        "",
+        "## 2. 红军推荐 + 蓝军存疑",
+        "",
+        *_render_merged_items(
+            sections["red_recommendations_blue_borderline"],
+            include_blue_reason=True,
+        ),
+        "",
+        "## 3. 蓝军漏推荐",
+        "",
+        *_render_missed_items(sections["blue_missed_recommendations"]),
+        "",
+        "## 独立报告",
+        "",
+        "- 红军主报告：`red-team-summary.md`",
+        "- 蓝军审阅报告：`review-summary.md`",
+        "",
+    ]
+    return "\n".join(lines)
+
+
+def _render_failed_merged_markdown(
+    red_report_payload: dict[str, object],
+    review_payload: dict[str, object],
+) -> str:
+    lines = [
+        "# arXiv 融合推荐报告",
+        "",
+        "- 状态：蓝军审阅失败，融合报告仅保留红军推荐摘要。",
+        f"- 失败原因：{review_payload.get('error', 'unknown error')}",
+        f"- 红军推荐：{len(_list_dicts(red_report_payload.get('papers')))}",
+        "",
+        "## 独立报告",
+        "",
+        "- 红军主报告：`red-team-summary.md`",
+        "- 蓝军审阅报告：`review-summary.md`",
+        "",
+    ]
+    return "\n".join(lines)
+
+
+def _render_merged_items(
+    items: list[dict[str, object]],
+    *,
+    include_blue_reason: bool,
+) -> list[str]:
+    if not items:
+        return ["- 无"]
+    lines: list[str] = []
+    for item in items:
+        line = (
+            f"- `{item.get('paper_id', '')}` {item.get('title', '')}"
+            f" | {item.get('category', '')}"
+        )
+        if item.get("red_reason"):
+            line += f" | 红军：{item.get('red_reason')}"
+        if include_blue_reason and item.get("blue_reason"):
+            line += (
+                f" | 蓝军：{item.get('blue_reason')}"
+                f"（confidence={item.get('confidence', '')}）"
+            )
+        lines.append(line)
+    return lines
+
+
+def _render_missed_items(items: list[dict[str, object]]) -> list[str]:
+    if not items:
+        return ["- 无"]
+    return [
+        (
+            f"- `{item.get('paper_id', '')}` {item.get('title', '')}"
+            f" | {item.get('category', '')}"
+            f" | 蓝军：{item.get('blue_reason', '')}"
+            f"（confidence={item.get('confidence', '')}）"
+        )
+        for item in items
+    ]
+
+
+def _render_merged_report_stdout(
+    red_report_payload: dict[str, object],
+    review_payload: dict[str, object],
+    sections: dict[str, list[dict[str, object]]],
+) -> str:
+    if review_payload.get("status") == "failed":
+        return (
+            "[WARN] 蓝军审阅失败，融合报告仅保留红军推荐摘要："
+            f"{review_payload.get('error', 'unknown error')}\n"
+        )
+    return (
+        "[OK] 融合推荐报告："
+        f"双方推荐 {len(sections['blue_and_red_recommendations'])}，"
+        f"红军推荐蓝军存疑 {len(sections['red_recommendations_blue_borderline'])}，"
+        f"蓝军漏推荐 {len(sections['blue_missed_recommendations'])}，"
+        f"红军原推荐 {len(_list_dicts(red_report_payload.get('papers')))}\n"
+    )
+
+
+def _list_dicts(value: object) -> list[dict[str, object]]:
+    if not isinstance(value, list):
+        return []
+    return [dict(item) for item in value if isinstance(item, dict)]
 
 
 def _compact_blue_team_payload(review_payload: dict[str, object]) -> dict[str, object]:

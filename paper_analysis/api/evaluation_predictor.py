@@ -15,11 +15,13 @@ from typing import TYPE_CHECKING, Any, Protocol
 from paper_analysis.api.evaluation_protocol import EvaluationPaper, EvaluationPrediction
 from paper_analysis.utils.ai_client import FallbackAiClient
 from paper_analysis.utils.doubao_client import DoubaoClient
+from paper_analysis.utils.openrouter_client import OpenRouterClient
 
 if TYPE_CHECKING:
     from concurrent.futures import Future
 
 MAX_EVIDENCE_SPANS = 2
+LLM_RECOMMENDER_MODEL = "deepseek/deepseek-v4-flash"
 ROOT_DIR = Path(__file__).resolve().parents[2]
 PAPERLIST_PROTOTYPE_FILES: tuple[Path, ...] = (
     ROOT_DIR / "third_party" / "paperlists" / "acl" / "acl2025.json",
@@ -34,7 +36,6 @@ PROTOTYPE_MAX_DOCS_PER_BUCKET = 80
 PROTOTYPE_SCORE_WEIGHT = 6.0
 PROTOTYPE_OTHER_MIN_SIMILARITY = 0.16
 SECONDARY_RESEARCH_OBJECT_MIN_SCORE = 3
-SYSTEM_SECONDARY_EMBEDDING_MIN_MARGIN = 0.01
 TOKEN_PATTERN = re.compile(r"[a-z][a-z0-9-]{2,}")
 TOKEN_STOPWORDS = {
     "about",
@@ -76,8 +77,10 @@ PRIMARY_RESEARCH_OBJECT_RULES: tuple[tuple[str, int, tuple[str, ...]], ...] = (
             "image text",
             "vlm",
             "lvlm",
+            "lvlms",
             "lmm",
             "mllm",
+            "mllms",
             "llava",
         ),
     ),
@@ -155,6 +158,12 @@ PRIMARY_RESEARCH_OBJECT_RULES: tuple[tuple[str, int, tuple[str, ...]], ...] = (
             "autoregressive language models",
             "decoder-only language model",
             "decoder-only language models",
+            "diffusion language model",
+            "diffusion language models",
+            "large reasoning model",
+            "large reasoning models",
+            "lrm",
+            "lrms",
             "语言模型",
         ),
     ),
@@ -166,8 +175,10 @@ PRIMARY_RESEARCH_OBJECT_RULES: tuple[tuple[str, int, tuple[str, ...]], ...] = (
             "speculative decoding",
             "draft model",
             "draft decoding",
+            "constrained decoding",
             "prompt compression",
             "context compression",
+            "token search space",
             "long-context llm",
             "long-context llms",
         ),
@@ -266,6 +277,7 @@ LLM_CONTEXT_KEYWORDS: tuple[str, ...] = (
     "speculative decoding",
     "draft model",
     "draft decoding",
+    "constrained decoding",
     "tree attention",
     "tree-attention",
     "long-context",
@@ -273,6 +285,7 @@ LLM_CONTEXT_KEYWORDS: tuple[str, ...] = (
     "prompt compression",
     "context compression",
     "token generation",
+    "token search space",
     "autoregressive",
     "inference",
     "serving",
@@ -297,10 +310,13 @@ POSITIVE_CONTEXT_KEYWORDS: tuple[str, ...] = (
     "accelerate",
     "cache",
     "compression",
+    "compressed",
+    "cost",
     "decode",
     "decoding",
     "efficiency",
     "efficient",
+    "footprint",
     "inference",
     "latency",
     "memory",
@@ -313,7 +329,10 @@ POSITIVE_CONTEXT_KEYWORDS: tuple[str, ...] = (
     "scheduling",
     "serving",
     "speedup",
+    "steps",
     "throughput",
+    "token",
+    "tokens",
 )
 OPTIMIZATION_VERB_KEYWORDS: tuple[str, ...] = ("accelerate", "improve", "optimize", "optimization", "reduce", "speedup")
 NEGATIVE_ONLY_TOPIC_KEYWORDS: tuple[str, ...] = (
@@ -343,6 +362,8 @@ PRIMARY_MODEL_CONTEXT_KEYWORDS: tuple[str, ...] = (
     "llms",
     "large language model",
     "large language models",
+    "large reasoning model",
+    "large reasoning models",
     "language model",
     "language models",
     "vision-language",
@@ -351,46 +372,29 @@ PRIMARY_MODEL_CONTEXT_KEYWORDS: tuple[str, ...] = (
     "multimodal language model",
     "multimodal large language model",
     "vlm",
+    "lvlm",
+    "lvlms",
     "mllm",
+    "mllms",
+    "large vision-language model",
+    "large vision-language models",
+    "large vision language model",
+    "large vision language models",
     "diffusion",
     "diffusion model",
+    "diffusion models",
+    "diffusion language model",
+    "diffusion language models",
+    "video diffusion",
+    "video generation",
+    "vla",
+    "vision-language-action",
     "dit",
     "ddpm",
     "ddim",
     "text-to-image",
 )
 PRIMARY_BUCKET_MIN_SIMILARITY = 0.115
-LLM_REVIEW_LABELS = {"上下文与缓存优化", "系统与调度优化", "算子与内核优化", "模型压缩"}
-EMBEDDING_POSITIVE_ANCHORS: dict[str, tuple[str, ...]] = {
-    "解码策略优化": (
-        "Large language model inference optimization with speculative decoding, parallel decoding, draft model acceptance rate and early exit.",
-        "Autoregressive LLM generation acceleration through better decoding algorithms and draft model verification.",
-    ),
-    "上下文与缓存优化": (
-        "Inference optimization for long context, KV cache, cache compression, token eviction and prompt compression in LLM serving.",
-        "Long-context language model serving with KV cache optimization, prompt compression and memory-efficient context management.",
-    ),
-    "系统与调度优化": (
-        "Serving system optimization for scheduler, batching, routing, prefetch, offload and multi-tenant LLM infrastructure.",
-        "Runtime scheduling and resource management for efficient model serving throughput and latency.",
-    ),
-    "算子与内核优化": (
-        "GPU kernel and fused operator optimization for transformer inference, attention kernels and compiler-level acceleration.",
-        "Kernel-level transformer inference acceleration using fused attention operators and optimized GPU primitives.",
-    ),
-    "模型压缩": (
-        "Model compression for inference such as quantization, pruning, distillation, low-bit weights and sparsity.",
-        "Low-bit quantization and pruning to reduce inference latency, memory and serving cost for large language models.",
-    ),
-}
-EMBEDDING_NEGATIVE_ANCHORS: tuple[str, ...] = (
-    "Benchmark, dataset, survey or evaluation paper without a concrete LLM inference optimization method.",
-    "Computer vision or multimodal benchmark paper focused on recognition accuracy instead of model inference efficiency.",
-    "General machine learning analysis, empirical study or resource without a direct optimization algorithm for inference.",
-    "Retrieval, ranking or recommendation task paper without a concrete model inference systems optimization method.",
-)
-EMBEDDING_HARD_VETO_MARGIN = 0.08
-EMBEDDING_CLEAR_POSITIVE_MARGIN = 0.04
 PREFERENCE_LABEL_RULES: tuple[tuple[str, tuple[str, ...]], ...] = (
     (
         "解码策略优化",
@@ -399,9 +403,33 @@ PREFERENCE_LABEL_RULES: tuple[tuple[str, tuple[str, ...]], ...] = (
             "self-speculative",
             "tree decoding",
             "parallel decoding",
+            "constrained decoding",
+            "grammar-constrained decoding",
             "early exit",
             "draft model",
             "acceptance rate",
+            "token search space",
+            "self-drafting",
+            "multi-branch self-drafting",
+            "self drafting",
+            "multi branch self drafting",
+            "never autoregressively decodes",
+            "asymmetric verification",
+            "global forking tokens",
+            "inference-time scaling",
+            "inference time scaling",
+            "chain-of-thought budget",
+            "shorter chain-of-thought",
+            "chain-of-thought",
+            "best-of-n",
+            "best of n",
+            "reranker-guided search",
+            "reasoning with sampling",
+            "sampling",
+            "denoising step",
+            "denoising steps",
+            "nfe",
+            "nfes",
         ),
     ),
     (
@@ -415,7 +443,23 @@ PREFERENCE_LABEL_RULES: tuple[tuple[str, tuple[str, ...]], ...] = (
             "context compression",
             "cache compression",
             "token selection",
+            "token compression",
+            "visual token compression",
+            "visual-token compression",
+            "token budget",
+            "token budgets",
+            "elastic visual-token",
             "attention sink",
+            "rag compression",
+            "online soft compression",
+            "context denoising",
+            "one vision token",
+            "dynamic visual-token exit",
+            "dynamic visual token exit",
+            "visual-token exit",
+            "visual token exit",
+            "token merging",
+            "token merge",
         ),
     ),
     (
@@ -435,6 +479,23 @@ PREFERENCE_LABEL_RULES: tuple[tuple[str, tuple[str, ...]], ...] = (
             "prefill decode",
             "request scheduling",
             "cache-aware scheduling",
+            "expert parallelism",
+            "cpu-gpu orchestration",
+            "gpu orchestration",
+            "orchestration",
+            "moe serving",
+            "model serving",
+            "resource-constrained gpu",
+            "resource-constrained gpus",
+            "outdated gpu",
+            "outdated gpus",
+            "multi-agent scheduling",
+            "multi-agent collaboration",
+            "budget-controllable",
+            "nucleus-electron",
+            "adaptive preference arithmetic",
+            "token/cost/latency",
+            "segment any instance",
         ),
     ),
     (
@@ -467,9 +528,31 @@ PREFERENCE_LABEL_RULES: tuple[tuple[str, tuple[str, ...]], ...] = (
             "weight-only",
             "gptq",
             "awq",
+            "post-training quantization",
+            "ptq",
+            "w4a4",
+            "hifloat4",
+            "tensor-structured compression",
+            "tensor structured compression",
+            "lora merging",
+            "adapter merging",
+            "expert pruning",
+            "expert merging",
+            "expert remapping",
+            "low-rank adapter",
         ),
     ),
 )
+
+
+@dataclass(frozen=True, slots=True)
+class LlmRecommendationReview:
+    """Two-threshold review result from one DS-V4-Flash call."""
+
+    broad_positive: bool
+    strict_positive: bool
+    label: str | None
+    reason: str
 
 
 @dataclass(frozen=True, slots=True)
@@ -773,11 +856,6 @@ class EvaluationAiClient(Protocol):
         """Return the resolved provider API key when configured."""
         ...
 
-    @property
-    def resolved_embedding_model(self) -> str | None:
-        """Return the resolved embedding model when configured."""
-        ...
-
     def submit(
         self,
         messages: list[dict[str, Any]],
@@ -786,23 +864,6 @@ class EvaluationAiClient(Protocol):
     ) -> Future[dict[str, Any]]:
         """Submit one chat-completion request."""
         ...
-
-    def embed_texts(
-        self,
-        texts: list[str],
-        *,
-        model: str | None = None,
-    ) -> EvaluationEmbeddingResponse:
-        """Embed a batch of texts."""
-        ...
-
-
-class EvaluationEmbeddingResponse(Protocol):
-    """Minimal embedding response surface required by the evaluation predictor."""
-
-    success: bool
-    vectors: list[list[float]]
-
 
 
 @dataclass(slots=True)
@@ -813,19 +874,21 @@ class EvaluationPredictor:
     llm_hard_case_review: bool = False
     ai_provider: str = "openrouter"
     _ai_client: EvaluationAiClient | None = field(default=None, init=False, repr=False)
-    _llm_cache: dict[str, bool] = field(default_factory=dict, init=False, repr=False)
-    _embedding_cache: dict[str, list[float] | None] = field(default_factory=dict, init=False, repr=False)
-    _embedding_anchor_cache: dict[str, Any] = field(default_factory=dict, init=False, repr=False)
+    _llm_cache: dict[str, LlmRecommendationReview] = field(
+        default_factory=dict,
+        init=False,
+        repr=False,
+    )
     _llm_cache_lock: threading.Lock = field(
         default_factory=threading.Lock,
         init=False,
         repr=False,
     )
-    _embedding_cache_lock: threading.Lock = field(
-        default_factory=threading.Lock,
-        init=False,
-        repr=False,
-    )
+
+    def __post_init__(self) -> None:
+        """Publish the effective algorithm version for evaluation reports."""
+        if self.llm_hard_case_review and self.algorithm_version == "heuristic-v1":
+            self.algorithm_version = f"heuristic-v1+{LLM_RECOMMENDER_MODEL}-dual-layer"
 
     def predict(self, paper: EvaluationPaper) -> EvaluationPrediction:
         """Build a heuristic prediction from a paper title, abstract, and keywords."""
@@ -833,7 +896,7 @@ class EvaluationPredictor:
         normalized = " \n".join(texts).lower()
         source_texts = [item for item in texts if item.strip()]
         primary_object = self._predict_primary_research_object(normalized)
-        label, label_keywords = self._predict_preference_label(normalized, primary_object)
+        label, label_keywords = self._predict_preference_label(normalized)
 
         if label is None:
             evidence = _extract_evidence(
@@ -857,35 +920,46 @@ class EvaluationPredictor:
                 notes="未检测到五个偏好标签中的明确主优化杠杆。",
             )
 
-        embedding_review = self._embedding_review_positive(
-            paper=paper,
-            text=normalized,
-            primary_object=primary_object,
-            label=label,
-        )
-        if embedding_review is False:
-            return EvaluationPrediction(
-                primary_research_object=primary_object,
-                preference_labels=[],
-                negative_tier="negative",
-                evidence_spans={"negative": [paper.title]},
-                notes=f"高风险正样本经 {self.ai_provider} embedding 复核后回退为 negative。",
-            )
-
-        if embedding_review is None and self._should_llm_review_positive():
-            llm_positive = self._review_positive_with_llm(
+        broad_negative_tier = "positive"
+        broad_preference_labels = [label]
+        recommendation_tier = "strict_positive"
+        llm_review_note = ""
+        if self._should_llm_review_positive():
+            llm_review = self._review_positive_with_llm(
                 paper=paper,
                 primary_object=primary_object,
                 label=label,
             )
-            if not llm_positive:
+            final_label = llm_review.label or label
+            if final_label not in _preference_label_set():
+                final_label = label
+            if final_label != label:
+                label_keywords = _preference_label_keywords(final_label)
+            broad_negative_tier = "positive" if llm_review.broad_positive else "negative"
+            broad_preference_labels = [final_label] if llm_review.broad_positive else []
+            recommendation_tier = (
+                "strict_positive"
+                if llm_review.strict_positive
+                else "broad_positive"
+                if llm_review.broad_positive
+                else "negative"
+            )
+            llm_review_note = f" DS-V4-Flash 复核：{llm_review.reason}"
+            if not llm_review.strict_positive:
                 return EvaluationPrediction(
                     primary_research_object=primary_object,
                     preference_labels=[],
                     negative_tier="negative",
                     evidence_spans={"negative": [paper.title]},
-                    notes=f"高风险正样本经 {self.ai_provider} 复核后回退为 negative。",
+                    notes=(
+                        f"启发式宽召回标签为：{label}；"
+                        f"strict 判定为 negative。{llm_review_note}"
+                    ),
+                    broad_negative_tier=broad_negative_tier,
+                    broad_preference_labels=broad_preference_labels,
+                    recommendation_tier=recommendation_tier,
                 )
+            label = final_label
 
         evidence = _extract_evidence(source_texts, label_keywords)
         if not evidence:
@@ -895,7 +969,10 @@ class EvaluationPredictor:
             preference_labels=[label],
             negative_tier="positive",
             evidence_spans={"general": [paper.title], label: evidence},
-            notes=f"基于标题、摘要与关键词的启发式规则判定主标签为：{label}。",
+            notes=f"基于标题、摘要与关键词宽召回主标签为：{label}。{llm_review_note}".strip(),
+            broad_negative_tier=broad_negative_tier,
+            broad_preference_labels=broad_preference_labels,
+            recommendation_tier=recommendation_tier,
         )
 
     def _predict_primary_research_object(self, text: str) -> str:
@@ -904,7 +981,6 @@ class EvaluationPredictor:
     def _predict_preference_label(
         self,
         text: str,
-        primary_object: str,
     ) -> tuple[str | None, tuple[str, ...]]:
         for label, keywords in PREFERENCE_LABEL_RULES:
             if label == "模型压缩" and _contains_any(
@@ -914,145 +990,19 @@ class EvaluationPredictor:
                 continue
             if not _contains_any(text, keywords):
                 continue
-            if not self._passes_positive_gate(text, primary_object, label):
+            if self._is_obvious_negative_recall_filter(text):
                 continue
             return label, keywords
         return None, ()
 
-    def _passes_positive_gate(
-        self,
-        text: str,
-        primary_object: str,
-        label: str,
-    ) -> bool:
+    def _is_obvious_negative_recall_filter(self, text: str) -> bool:
         has_negative_topic = _contains_any(text, NEGATIVE_ONLY_TOPIC_KEYWORDS)
         has_positive_context = _contains_any(text, POSITIVE_CONTEXT_KEYWORDS)
         has_primary_model_context = _contains_any(text, PRIMARY_MODEL_CONTEXT_KEYWORDS)
-        if has_negative_topic and not has_positive_context:
-            return False
-        if (
-            primary_object in SECONDARY_OBJECT_LABELS
-            and label in {"模型压缩", "系统与调度优化", "算子与内核优化"}
-            and not has_positive_context
-        ):
-            return False
-        if primary_object in SECONDARY_OBJECT_LABELS and label in {
-            "上下文与缓存优化",
-            "系统与调度优化",
-            "算子与内核优化",
-            "模型压缩",
-        }:
-            prototype_similarities = _prototype_bucket_similarities(text)
-            max_primary_similarity = max(
-                prototype_similarities.get("LLM", 0.0),
-                prototype_similarities.get("VLM", 0.0),
-                prototype_similarities.get("Diffusion", 0.0),
-            )
-            if not has_primary_model_context and max_primary_similarity < PRIMARY_BUCKET_MIN_SIMILARITY:
-                return False
-        if label == "模型压缩" and not _contains_any(
-            text,
-            (
-                "inference",
-                "serving",
-                "throughput",
-                "latency",
-                "memory",
-                "efficient",
-                "efficiency",
-                "llm",
-                "language model",
-                "transformer inference",
-                "serving",
-            ),
-        ):
-            return False
-        if label == "系统与调度优化" and not _contains_any(
-            text,
-            (
-                "scheduler",
-                "scheduling",
-                "batching",
-                "load balancing",
-                "routing",
-                "latency",
-                "throughput",
-                "runtime",
-                "resource",
-                "multi-tenant",
-                "offload",
-                "prefetch",
-                "serving system",
-            ),
-        ):
-            return False
-        return not (
-            label == "算子与内核优化"
-            and not _contains_any(
-                text,
-                ("inference", "attention", "transformer", "latency", "throughput"),
-            )
-        )
-
-    def _embedding_review_positive(
-        self,
-        *,
-        paper: EvaluationPaper,
-        text: str,
-        primary_object: str,
-        label: str,
-    ) -> bool | None:
-        if not self._should_embedding_review_positive(text, primary_object, label):
-            return True
-        margin = self._embedding_review_margin(paper=paper, label=label)
-        if margin is None:
-            return None
-        if label == "系统与调度优化" and primary_object in SECONDARY_OBJECT_LABELS:
-            if margin < SYSTEM_SECONDARY_EMBEDDING_MIN_MARGIN:
-                return False
-            return margin >= EMBEDDING_CLEAR_POSITIVE_MARGIN
-        if margin <= -EMBEDDING_HARD_VETO_MARGIN:
-            return False
-        return True if margin >= EMBEDDING_CLEAR_POSITIVE_MARGIN else None
-
-    def _embedding_review_margin(
-        self,
-        *,
-        paper: EvaluationPaper,
-        label: str,
-    ) -> float | None:
-        client = self._get_ai_client()
-        if client is None or not client.resolved_api_key or not client.resolved_embedding_model:
-            return None
-        paper_vector = self._embed_text_cached(_paper_to_embedding_text_for_review(paper))
-        if not paper_vector:
-            return None
-        anchors = self._get_embedding_anchors()
-        if not anchors:
-            return None
-        positive_vectors = anchors["positive"].get(label, [])
-        negative_vectors = anchors["negative"]
-        if not positive_vectors or not negative_vectors:
-            return None
-        positive_similarity = max(_cosine_similarity_dense(paper_vector, vector) for vector in positive_vectors)
-        negative_similarity = max(_cosine_similarity_dense(paper_vector, vector) for vector in negative_vectors)
-        return positive_similarity - negative_similarity
-
-    def _should_embedding_review_positive(
-        self,
-        text: str,
-        primary_object: str,
-        label: str,
-    ) -> bool:
-        has_negative_topic = _contains_any(text, NEGATIVE_ONLY_TOPIC_KEYWORDS)
-        if label not in LLM_REVIEW_LABELS:
-            return False
-        if has_negative_topic:
-            return True
-        return primary_object in SECONDARY_OBJECT_LABELS
+        return has_negative_topic and not has_positive_context and not has_primary_model_context
 
     def _should_llm_review_positive(self) -> bool:
-        return False
+        return self.llm_hard_case_review
 
     def _review_positive_with_llm(
         self,
@@ -1060,7 +1010,7 @@ class EvaluationPredictor:
         paper: EvaluationPaper,
         primary_object: str,
         label: str,
-    ) -> bool:
+    ) -> LlmRecommendationReview:
         cache_key = json.dumps(
             {
                 "title": paper.title,
@@ -1079,18 +1029,39 @@ class EvaluationPredictor:
 
         client = self._get_ai_client()
         if client is None or not client.resolved_api_key:
-            return True
+            return LlmRecommendationReview(
+                broad_positive=True,
+                strict_positive=True,
+                label=label,
+                reason="AI client 未配置，保留启发式正样本。",
+            )
 
         messages: list[dict[str, Any]] = [
             {
                 "role": "system",
                 "content": (
-                    "你是论文推理优化分类复核器。"
-                    "只判断这篇论文是否明确属于以下五个推理优化偏好之一："
-                    "解码策略优化、上下文与缓存优化、系统与调度优化、算子与内核优化、模型压缩。"
-                    "如果论文主要是 benchmark、dataset、survey、analysis，"
-                    "或只是通用训练/感知/检索任务，没有明确的推理效率优化方法，应判 false。"
-                    '只输出 JSON：{"accept_positive": true/false, "reason": "..."}'
+                    "你是 DS-V4-Flash 推荐裁判，用于论文推理效率推荐的主算法复核。"
+                    "启发式已经做了宽召回。你必须在一次调用中同时给出两层语义："
+                    "broad_positive 用于高召回候选池，目标是少误杀，适合人工抽检；"
+                    "strict_positive 用于日报最终推荐，目标是高准确。"
+                    "broad_positive 标准：论文可能和推理效率、推理时搜索、推理时 token/cost/budget、"
+                    "serving 调度、压缩、缓存、解码、采样或生成步数优化相关，就应收进候选池；"
+                    "证据不完整、术语新、类别边界不稳时也应给 broad_positive=true。"
+                    "broad_positive 的宽松性不得影响 strict_positive。"
+                    "strict_positive 是最终推荐裁判口径，只能在论文明确应该进入日报推荐时为 true。"
+                    "strict 正例必须满足：研究对象是 LLM/VLM/视频生成或视频扩散/VLA/LLM-Agent serving；"
+                    "方法直接发生在推理、部署、serving、解码、KV/cache、token budget、模型压缩、算子或调度路径；"
+                    "并且明确优化 latency、throughput、memory、FLOPs、token 数、step/NFE、cost 或实时性。"
+                    "非 LLM 的 video diffusion / VLA 推理加速算正例。"
+                    "MoE expert pruning/merging/remapping、低比特量化、KV/attention/token 压缩、"
+                    "面向部署显存/内存 footprint 的模型压缩可算正例。"
+                    "多模型/多 Agent 推理中的模型路由、动态拓扑、token/cost/latency 调度可算正例。"
+                    "纯训练效率、质量提升、benchmark/dataset/survey、垂直应用流程、表示学习、检索质量、审计/安全分析、"
+                    "以及仅把 efficient 当形容词但没有推理效率证据的论文，strict_positive 必须为 false；"
+                    "如果它们只是边界相关，可以 broad_positive=true。"
+                    "只有明显属于这些负例时，broad_positive 才判 false。"
+                    "label 必须是五类之一或空字符串：解码策略优化、上下文与缓存优化、系统与调度优化、算子与内核优化、模型压缩。"
+                    '只输出 JSON：{"broad_positive": true/false, "strict_positive": true/false, "label": "...", "reason": "..."}'
                 ),
             },
             {
@@ -1114,10 +1085,20 @@ class EvaluationPredictor:
         try:
             response = client.submit(messages).result(timeout=90)
         except (RuntimeError, TimeoutError, ValueError):
-            return True
+            return LlmRecommendationReview(
+                broad_positive=True,
+                strict_positive=True,
+                label=label,
+                reason="LLM 调用失败，保留启发式正样本。",
+            )
         content = str(response.get("content", "") or "")
         parsed = self._parse_llm_review_response(content)
-        decision = parsed if parsed is not None else True
+        decision = parsed or LlmRecommendationReview(
+            broad_positive=True,
+            strict_positive=False,
+            label=label,
+            reason="LLM 响应无法解析，仅保留为 broad 候选。",
+        )
         with self._llm_cache_lock:
             self._llm_cache[cache_key] = decision
         return decision
@@ -1125,54 +1106,23 @@ class EvaluationPredictor:
     def _get_ai_client(self) -> EvaluationAiClient | None:
         if self._ai_client is None:
             if self.ai_provider == "openrouter":
-                self._ai_client = FallbackAiClient(concurrency=4)
+                self._ai_client = FallbackAiClient(
+                    primary=OpenRouterClient(
+                        chat_model=LLM_RECOMMENDER_MODEL,
+                        concurrency=4,
+                    ),
+                    concurrency=4,
+                )
             elif self.ai_provider == "doubao":
                 self._ai_client = DoubaoClient(concurrency=4)
             else:
                 raise ValueError(f"不支持的 AI provider：{self.ai_provider}")
         return self._ai_client
 
-    def _embed_text_cached(self, text: str) -> list[float] | None:
-        with self._embedding_cache_lock:
-            if text in self._embedding_cache:
-                return self._embedding_cache[text]
-        client = self._get_ai_client()
-        if client is None or not client.resolved_embedding_model:
-            return None
-        try:
-            response = client.embed_texts([text], model=client.resolved_embedding_model)
-        except (RuntimeError, ValueError):
-            vector: list[float] | None = None
-        else:
-            vector = response.vectors[0] if response.success and response.vectors else None
-        with self._embedding_cache_lock:
-            self._embedding_cache[text] = vector
-        return vector
-
-    def _get_embedding_anchors(self) -> dict[str, Any] | None:
-        with self._embedding_cache_lock:
-            if self._embedding_anchor_cache:
-                return self._embedding_anchor_cache
-        client = self._get_ai_client()
-        if client is None or not client.resolved_embedding_model:
-            return None
-        positive_vectors: dict[str, list[list[float]]] = {}
-        for label, texts in EMBEDDING_POSITIVE_ANCHORS.items():
-            vectors = [self._embed_text_cached(text) for text in texts]
-            positive_vectors[label] = [vector for vector in vectors if vector]
-        negative_vectors = [
-            vector
-            for vector in (self._embed_text_cached(text) for text in EMBEDDING_NEGATIVE_ANCHORS)
-            if vector
-        ]
-        if not negative_vectors:
-            return None
-        anchors = {"positive": positive_vectors, "negative": negative_vectors}
-        with self._embedding_cache_lock:
-            self._embedding_anchor_cache = anchors
-        return anchors
-
-    def _parse_llm_review_response(self, content: str) -> bool | None:
+    def _parse_llm_review_response(
+        self,
+        content: str,
+    ) -> LlmRecommendationReview | None:
         if not content.strip():
             return None
         try:
@@ -1185,28 +1135,41 @@ class EvaluationPredictor:
                 payload = json.loads(match.group(0))
             except json.JSONDecodeError:
                 return None
+        broad_positive = payload.get("broad_positive")
+        strict_positive = payload.get("strict_positive")
+        if isinstance(broad_positive, bool) and isinstance(strict_positive, bool):
+            broad_positive = broad_positive or strict_positive
+            return LlmRecommendationReview(
+                broad_positive=broad_positive,
+                strict_positive=strict_positive,
+                label=_normalize_llm_label(payload.get("label")),
+                reason=str(payload.get("reason", "")).strip()[:500],
+            )
         accept_positive = payload.get("accept_positive")
         if isinstance(accept_positive, bool):
-            return accept_positive
+            return LlmRecommendationReview(
+                broad_positive=accept_positive,
+                strict_positive=accept_positive,
+                label=_normalize_llm_label(payload.get("label")),
+                reason=str(payload.get("reason", "")).strip()[:500],
+            )
         return None
 
 
-def _paper_to_embedding_text_for_review(paper: EvaluationPaper) -> str:
-    parts = [
-        paper.title.strip(),
-        " ".join(paper.keywords or []),
-        paper.abstract.strip(),
-        paper.abstract_zh.strip(),
-    ]
-    return "\n".join(part for part in parts if part)
+def _preference_label_set() -> set[str]:
+    return {label for label, _keywords in PREFERENCE_LABEL_RULES}
 
 
-def _cosine_similarity_dense(left: list[float], right: list[float]) -> float:
-    if not left or not right or len(left) != len(right):
-        return 0.0
-    numerator = sum(a * b for a, b in zip(left, right, strict=True))
-    left_norm = math.sqrt(sum(value * value for value in left))
-    right_norm = math.sqrt(sum(value * value for value in right))
-    if left_norm == 0.0 or right_norm == 0.0:
-        return 0.0
-    return numerator / (left_norm * right_norm)
+def _preference_label_keywords(label: str) -> tuple[str, ...]:
+    for candidate_label, keywords in PREFERENCE_LABEL_RULES:
+        if candidate_label == label:
+            return keywords
+    return ()
+
+
+def _normalize_llm_label(value: object) -> str | None:
+    label = str(value or "").strip()
+    if label in _preference_label_set():
+        return label
+    return None
+

@@ -2,13 +2,14 @@ from __future__ import annotations
 
 import unittest
 
+from paper_analysis.api.evaluation_predictor import EvaluationPredictor
 from paper_analysis.domain.paper import Paper
 from paper_analysis.services.arxiv_recommender import ArxivRecommender
 
 
 class ArxivRecommenderTests(unittest.TestCase):
     def test_recommender_keeps_llm_inference_acceleration_papers(self) -> None:
-        recommender = ArxivRecommender()
+        recommender = ArxivRecommender(predictor=EvaluationPredictor())
 
         result = recommender.recommend(
             [
@@ -36,7 +37,7 @@ class ArxivRecommenderTests(unittest.TestCase):
         )
 
     def test_recommender_drops_clear_negative_benchmark_papers(self) -> None:
-        recommender = ArxivRecommender()
+        recommender = ArxivRecommender(predictor=EvaluationPredictor())
 
         result = recommender.recommend(
             [
