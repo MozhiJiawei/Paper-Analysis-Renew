@@ -29,6 +29,10 @@ py -m paper_analysis.cli.main <namespace> <action> [options]
   - 订阅 API 模式：`arxiv report --source-mode subscription-api --subscription-date <YYYY-MM/MM-DD> [--category <term>]... [--max-results <int>]`
   - 订阅邮件模式：`arxiv report --source-mode subscription-email --subscription-date <YYYY-MM/MM-DD> [--category <term>]... [--max-results <int>]`
   - 默认行为：先抓取候选，再把过滤后的推荐结果写入基础四件套
+  - 订阅邮件全量模式：`arxiv report --subscription-date <YYYY-MM/MM-DD> --fetch-all [--batch-size 100]`
+  - 订阅邮件全量模式会按批次推进推荐与蓝军审阅进度；同一命令可重复运行续跑，游标写入分日目录 `workflow-state.json`
+  - 全量模式只有推荐批次和蓝军审阅全部完成后，才生成 `final-summary.md` / `final-result.json` / `final-result.csv` / `final-stdout.txt`，并同步到 `artifacts/e2e/arxiv/latest/`
+  - 若 `final-*` 产物不存在，视为未完成中间态；GitHub Issue 发布脚本只能提醒继续运行同一条 CLI，不能发布半成品
   - 订阅投递模式：`arxiv report --subscription-date <YYYY-MM/MM-DD> [--category <term>]... [--max-results <int>] --deliver-subscription`
   - 订阅邮件模式下默认执行大模型蓝军审阅，结论会写回 `artifacts/e2e/arxiv/latest/summary.md` 与 `result.json`
   - 详细审阅产物保留在：`artifacts/reviews/arxiv/latest/summary.md`、`result.json`、`stdout.txt`

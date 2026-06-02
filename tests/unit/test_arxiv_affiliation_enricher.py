@@ -3,6 +3,7 @@ from __future__ import annotations
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from paper_analysis.domain.paper import Paper
 from paper_analysis.sources.arxiv.affiliation_enricher import (
@@ -96,6 +97,73 @@ class ArxivAffiliationEnricherTests(unittest.TestCase):
         self.assertEqual("Tencent WeChat AI | Michigan State University", paper.organization)
         self.assertEqual("ok", results[0].status)
         self.assertEqual("ok", paper.raw_payload["affiliation_enrichment"]["status"])
+
+    def test_enrich_starts_local_grobid_before_processing(self) -> None:
+        paper = Paper(
+            paper_id="2605.24306",
+            title="CoDA",
+            abstract="Efficient detection.",
+            source="arxiv",
+            venue="arXiv",
+            authors=["Ada"],
+            tags=["cs.CV"],
+            organization="",
+            published_at="2026-05-23",
+            pdf_url="https://arxiv.org/pdf/2605.24306",
+        )
+        starts: list[str] = []
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            cache_dir = Path(temp_dir)
+
+            def fake_download(_url: str, output_path: Path) -> bool:
+                output_path.write_bytes(b"%PDF-1.4")
+                return True
+
+            with patch(
+                "paper_analysis.sources.arxiv.affiliation_enricher.extract_affiliations_with_grobid",
+                return_value=["Started Lab"],
+            ):
+                results = enrich_selected_arxiv_papers_with_affiliations(
+                    [paper],
+                    grobid_base_url="http://127.0.0.1:8070",
+                    cache_dir=cache_dir,
+                    downloader=fake_download,
+                    grobid_client=None,
+                    grobid_service_starter=starts.append,
+                )
+
+        self.assertEqual(["http://127.0.0.1:8070"], starts)
+        self.assertEqual("Started Lab", paper.organization)
+        self.assertEqual("ok", results[0].status)
+
+    def test_enrich_records_grobid_unavailable_when_start_fails(self) -> None:
+        paper = Paper(
+            paper_id="2605.24306",
+            title="CoDA",
+            abstract="Efficient detection.",
+            source="arxiv",
+            venue="arXiv",
+            authors=["Ada"],
+            tags=["cs.CV"],
+            organization="",
+            published_at="2026-05-23",
+            pdf_url="https://arxiv.org/pdf/2605.24306",
+        )
+
+        results = enrich_selected_arxiv_papers_with_affiliations(
+            [paper],
+            grobid_base_url="http://127.0.0.1:8070",
+            downloader=lambda _url, _path: self.fail("should not download without grobid"),
+            grobid_service_starter=lambda _base_url: (_ for _ in ()).throw(
+                OSError("docker unavailable")
+            ),
+        )
+
+        self.assertEqual("", paper.organization)
+        self.assertEqual("grobid-unavailable", results[0].status)
+        self.assertEqual("grobid-unavailable", paper.raw_payload["affiliation_enrichment"]["status"])
+        self.assertIn("docker unavailable", paper.raw_payload["affiliation_enrichment"]["error"])
 
     def test_enrich_selected_papers_skips_existing_organization(self) -> None:
         paper = Paper(

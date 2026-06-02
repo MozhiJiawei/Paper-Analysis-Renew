@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import shutil
+from collections import Counter
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -27,6 +28,9 @@ from paper_analysis.services.llm_recommendation_reviewer import (
 )
 from paper_analysis.services.report_writer import serialize_papers, write_report
 from paper_analysis.shared.paths import ARTIFACTS_DIR
+from paper_analysis.sources.arxiv.affiliation_enricher import (
+    enrich_selected_arxiv_papers_with_affiliations,
+)
 
 if TYPE_CHECKING:
     import argparse
@@ -56,6 +60,17 @@ def register(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) ->
         action="store_true",
         help="在生成基础报告后继续执行订阅投递闭环（邮件 + HTML 站点 + 归档）",
     )
+    report_parser.add_argument(
+        "--batch-size",
+        type=int,
+        default=100,
+        help="订阅邮件全量报告每次推进的候选论文批大小，默认 100",
+    )
+    report_parser.add_argument(
+        "--reset-progress",
+        action="store_true",
+        help="清除该订阅日期的未完成分批进度后重新开始",
+    )
     report_parser.set_defaults(handler=handle_report)
 
     import_dataset_parser = arxiv_subparsers.add_parser(
@@ -75,6 +90,8 @@ def register(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) ->
         max_results=10,
         fetch_all=False,
         deliver_subscription=False,
+        batch_size=100,
+        reset_progress=False,
     )
 
 
@@ -138,6 +155,8 @@ def handle_report(args: argparse.Namespace) -> int:
     delivery_error = _validate_subscription_delivery_args(args)
     if delivery_error is not None:
         return delivery_error
+    if _should_run_resumable_report(args):
+        return _handle_resumable_report(args)
 
     try:
         result = ArxivPipeline(
@@ -244,6 +263,169 @@ def handle_report(args: argparse.Namespace) -> int:
         f"latest_page: {delivery_result.latest_page_path}",
         f"history_page: {delivery_result.index_page_path}",
     )
+    return 0
+
+
+def _should_run_resumable_report(args: argparse.Namespace) -> bool:
+    return (
+        args.source_mode == "subscription-email"
+        and bool(args.subscription_date)
+        and bool(args.fetch_all)
+    )
+
+
+def _handle_resumable_report(args: argparse.Namespace) -> int:
+    try:
+        return _run_resumable_report(args)
+    except CliInputError as exc:
+        return print_cli_error(
+            scope="arxiv.report",
+            message=str(exc),
+            next_step="继续运行同一条 arxiv report 命令，或确认后追加 --reset-progress 重开批次",
+        )
+
+
+def _run_resumable_report(args: argparse.Namespace) -> int:
+    batch_size = _validated_report_batch_size(args)
+    content_date = str(args.subscription_date or "")
+    daily_dir = _dated_report_dir(content_date)
+    work_dir = daily_dir / "work"
+    state_path = daily_dir / "workflow-state.json"
+    if args.reset_progress and daily_dir.exists():
+        shutil.rmtree(daily_dir)
+    work_dir.mkdir(parents=True, exist_ok=True)
+
+    pipeline = ArxivPipeline(
+        recommender=ArxivRecommender(
+            predictor=EvaluationPredictor(llm_hard_case_review=True)
+        )
+    )
+    candidate_papers = pipeline._load_records(  # noqa: SLF001
+        papers_path=args.input,
+        source_mode=args.source_mode,
+        subscription_date=args.subscription_date,
+        categories=args.category,
+        max_results=args.max_results,
+        fetch_all=args.fetch_all,
+        progress=emit_progress,
+    )
+    candidate_ids = [paper.paper_id for paper in candidate_papers]
+    state = _load_workflow_state(state_path)
+    if state:
+        _validate_workflow_state(
+            state=state,
+            content_date=content_date,
+            candidate_ids=candidate_ids,
+            batch_size=batch_size,
+        )
+        final_summary_path = daily_dir / "final-summary.md"
+        if state.get("status") == "final_complete" and final_summary_path.exists():
+            emit_lines(
+                f"[OK] arXiv 最终报告已存在：{final_summary_path}",
+                "next: GitHub Issue 发布脚本可以读取 final-* 产物",
+            )
+            return 0
+    else:
+        state = _new_workflow_state(
+            content_date=content_date,
+            candidate_ids=candidate_ids,
+            batch_size=batch_size,
+        )
+        _write_workflow_state(state_path, state)
+
+    processed_count = int(state.get("processed_count", 0))
+    total_count = len(candidate_papers)
+    if processed_count < total_count:
+        end_index = min(processed_count + batch_size, total_count)
+        batch_papers = candidate_papers[processed_count:end_index]
+        emit_progress(
+            "[arxiv] resumable recommendation batch "
+            f"{processed_count + 1}-{end_index}/{total_count}"
+        )
+        batch_result = ArxivRecommender(
+            predictor=EvaluationPredictor(llm_hard_case_review=True)
+        ).recommend(batch_papers, limit=None, progress=emit_progress)
+        enrichment_results = enrich_selected_arxiv_papers_with_affiliations(batch_result.papers)
+        _emit_affiliation_enrichment_summary(enrichment_results)
+        _write_recommendation_batch(
+            work_dir=work_dir,
+            batch_index=(processed_count // batch_size) + 1,
+            start_index=processed_count,
+            end_index=end_index,
+            candidate_papers=batch_papers,
+            recommended_papers=batch_result.papers,
+        )
+        state["processed_count"] = end_index
+        state["status"] = (
+            "recommendation_complete"
+            if end_index >= total_count
+            else "recommendation_in_progress"
+        )
+        _write_workflow_state(state_path, state)
+        if end_index < total_count:
+            _emit_resumable_incomplete(
+                content_date=content_date,
+                processed_count=end_index,
+                total_count=total_count,
+                state_path=state_path,
+            )
+            return 0
+
+    candidate_papers = _load_workflow_candidate_papers(work_dir)
+    recommended_papers = _load_workflow_recommended_papers(work_dir)
+    report_artifacts = write_report(
+        report_dir=work_dir,
+        source_name="arXiv",
+        papers=recommended_papers,
+        command_name=_build_command_name(args),
+        analysis_count=total_count,
+    )
+    _attach_candidate_papers_to_report(
+        report_json_path=report_artifacts["json"],
+        candidate_papers=candidate_papers,
+    )
+    _attach_recommendation_layers_to_report(
+        report_artifacts=report_artifacts,
+        candidate_papers=candidate_papers,
+    )
+    _snapshot_red_team_report(work_dir)
+
+    review_dir = daily_dir / "review"
+    review_result = _write_default_review_artifacts(
+        args=args,
+        report_dir=work_dir,
+        candidate_papers=candidate_papers,
+        output_dir=review_dir,
+        resume_dir=daily_dir / "review-progress",
+    )
+    if _should_write_default_review(args) and review_result is None:
+        state["status"] = "review_failed"
+        state["review_artifact"] = str(review_dir / "summary.md")
+        _write_workflow_state(state_path, state)
+        raise CliInputError(
+            f"蓝军审阅未成功完成，最终报告未生成；请检查 {review_dir / 'summary.md'} 后续跑"
+        )
+    if _should_write_default_review(args):
+        _append_blue_team_review_to_report(
+            report_artifacts=report_artifacts,
+            review_json_path=review_dir / "result.json",
+        )
+    _publish_final_report(
+        daily_dir=daily_dir,
+        work_dir=work_dir,
+        review_dir=review_dir,
+    )
+    state["status"] = "final_complete"
+    state["final_report"] = str(daily_dir / "final-summary.md")
+    _write_workflow_state(state_path, state)
+
+    lines = [
+        f"[OK] arXiv 最终报告已生成：{daily_dir / 'final-summary.md'}",
+        f"[OK] latest 已同步：{ARTIFACTS_DIR / 'e2e' / 'arxiv' / 'latest' / 'summary.md'}",
+    ]
+    if review_result:
+        lines.append(f"[OK] 大模型审阅已生成：{review_result.markdown_path}")
+    emit_lines(*lines)
     return 0
 
 
@@ -509,6 +691,206 @@ def _snapshot_red_team_report(report_dir: Path) -> None:
             shutil.copyfile(source_path, report_dir / target_name)
 
 
+def _validated_report_batch_size(args: argparse.Namespace) -> int:
+    value = int(getattr(args, "batch_size", 100) or 100)
+    if value <= 0:
+        raise CliInputError("--batch-size 必须大于 0")
+    return value
+
+
+def _load_workflow_state(state_path: Path) -> dict[str, object]:
+    if not state_path.exists():
+        return {}
+    try:
+        payload = json.loads(state_path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise CliInputError(f"分批状态文件无法解析：{state_path}") from exc
+    if not isinstance(payload, dict):
+        raise CliInputError(f"分批状态文件顶层不是对象：{state_path}")
+    return payload
+
+
+def _new_workflow_state(
+    *,
+    content_date: str,
+    candidate_ids: list[str],
+    batch_size: int,
+) -> dict[str, object]:
+    return {
+        "status": "recommendation_in_progress",
+        "content_date": content_date,
+        "batch_size": batch_size,
+        "total_count": len(candidate_ids),
+        "processed_count": 0,
+        "candidate_ids": candidate_ids,
+    }
+
+
+def _validate_workflow_state(
+    *,
+    state: dict[str, object],
+    content_date: str,
+    candidate_ids: list[str],
+    batch_size: int,
+) -> None:
+    if str(state.get("content_date", "") or "") != content_date:
+        raise CliInputError("分批状态日期与本次订阅日期不匹配")
+    if int(state.get("batch_size", 0) or 0) != batch_size:
+        raise CliInputError(
+            "分批大小与已有进度不一致；请使用相同 --batch-size，"
+            "或确认后追加 --reset-progress"
+        )
+    previous_ids = state.get("candidate_ids")
+    if not isinstance(previous_ids, list) or [str(item) for item in previous_ids] != candidate_ids:
+        raise CliInputError(
+            "候选论文集合已变化；为避免游标错位，请确认后追加 --reset-progress 重跑"
+        )
+
+
+def _write_workflow_state(state_path: Path, state: dict[str, object]) -> None:
+    state_path.parent.mkdir(parents=True, exist_ok=True)
+    state_path.write_text(
+        json.dumps(state, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+
+
+def _write_recommendation_batch(
+    *,
+    work_dir: Path,
+    batch_index: int,
+    start_index: int,
+    end_index: int,
+    candidate_papers: list[Paper],
+    recommended_papers: list[Paper],
+) -> None:
+    batch_dir = work_dir / "recommendation-batches"
+    batch_dir.mkdir(parents=True, exist_ok=True)
+    batch_path = batch_dir / f"batch-{batch_index:06d}.json"
+    batch_path.write_text(
+        json.dumps(
+            {
+                "batch_index": batch_index,
+                "start_index": start_index,
+                "end_index": end_index,
+                "candidate_count": len(candidate_papers),
+                "recommended_count": len(recommended_papers),
+                "candidate_papers": serialize_papers(candidate_papers),
+                "recommended_papers": serialize_papers(recommended_papers),
+            },
+            ensure_ascii=False,
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+
+
+def _load_workflow_candidate_papers(work_dir: Path) -> list[Paper]:
+    rows: list[dict[str, object]] = []
+    for payload in _load_recommendation_batch_payloads(work_dir):
+        rows.extend(_list_dicts(payload.get("candidate_papers")))
+    return _papers_from_report_rows(rows)
+
+
+def _load_workflow_recommended_papers(work_dir: Path) -> list[Paper]:
+    rows: list[dict[str, object]] = []
+    for payload in _load_recommendation_batch_payloads(work_dir):
+        rows.extend(_list_dicts(payload.get("recommended_papers")))
+    papers = _papers_from_report_rows(rows)
+    papers.sort(key=lambda item: (item.sampled_reason, item.title))
+    return papers
+
+
+def _load_recommendation_batch_payloads(work_dir: Path) -> list[dict[str, object]]:
+    batch_dir = work_dir / "recommendation-batches"
+    if not batch_dir.exists():
+        raise CliInputError(f"找不到推荐批次目录：{batch_dir}")
+    payloads: list[dict[str, object]] = []
+    for batch_path in sorted(batch_dir.glob("batch-*.json")):
+        try:
+            payload = json.loads(batch_path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError as exc:
+            raise CliInputError(f"推荐批次 JSON 无法解析：{batch_path}") from exc
+        if not isinstance(payload, dict):
+            raise CliInputError(f"推荐批次 JSON 顶层不是对象：{batch_path}")
+        payloads.append(payload)
+    if not payloads:
+        raise CliInputError(f"推荐批次目录为空：{batch_dir}")
+    return payloads
+
+
+def _emit_resumable_incomplete(
+    *,
+    content_date: str,
+    processed_count: int,
+    total_count: int,
+    state_path: Path,
+) -> None:
+    emit_lines(
+        "[INCOMPLETE] arXiv 分批报告尚未完成",
+        f"subscription_date: {content_date}",
+        f"progress: {processed_count}/{total_count}",
+        f"cursor: {state_path}",
+        "next: 继续运行同一条 `py -m paper_analysis.cli.main arxiv report "
+        f"--subscription-date {content_date} --fetch-all`",
+        "final: 最终报告尚未生成，GitHub Issue 发布脚本应提醒续跑",
+    )
+
+
+def _emit_affiliation_enrichment_summary(results: list[object]) -> None:
+    statuses = Counter(str(getattr(result, "status", "unknown")) for result in results)
+    if not statuses:
+        return
+    summary = "，".join(f"{status}={count}" for status, count in sorted(statuses.items()))
+    emit_progress(f"[arxiv] affiliation enrichment summary: {summary}")
+
+
+def _publish_final_report(
+    *,
+    daily_dir: Path,
+    work_dir: Path,
+    review_dir: Path,
+) -> None:
+    required_work_files = {
+        "summary.md": "final-summary.md",
+        "result.json": "final-result.json",
+        "result.csv": "final-result.csv",
+        "stdout.txt": "final-stdout.txt",
+        "red-team-summary.md": "red-team-summary.md",
+        "red-team-result.json": "red-team-result.json",
+        "red-team-result.csv": "red-team-result.csv",
+        "red-team-stdout.txt": "red-team-stdout.txt",
+    }
+    for source_name, target_name in required_work_files.items():
+        source_path = work_dir / source_name
+        if not source_path.exists():
+            raise CliInputError(f"最终报告门禁失败，缺少产物：{source_path}")
+        shutil.copyfile(source_path, daily_dir / target_name)
+    _copy_review_artifacts_into_daily_dir(review_dir, daily_dir)
+
+    latest_dir = ARTIFACTS_DIR / "e2e" / "arxiv" / "latest"
+    if latest_dir.exists():
+        shutil.rmtree(latest_dir)
+    latest_dir.mkdir(parents=True, exist_ok=True)
+    latest_files = {
+        "final-summary.md": "summary.md",
+        "final-result.json": "result.json",
+        "final-result.csv": "result.csv",
+        "final-stdout.txt": "stdout.txt",
+        "red-team-summary.md": "red-team-summary.md",
+        "red-team-result.json": "red-team-result.json",
+        "red-team-result.csv": "red-team-result.csv",
+        "red-team-stdout.txt": "red-team-stdout.txt",
+        "review-summary.md": "review-summary.md",
+        "review-result.json": "review-result.json",
+        "review-stdout.txt": "review-stdout.txt",
+    }
+    for source_name, target_name in latest_files.items():
+        source_path = daily_dir / source_name
+        if source_path.exists():
+            shutil.copyfile(source_path, latest_dir / target_name)
+
+
 def _dated_report_dir(content_date: str) -> Path:
     month, day = _split_content_date(content_date)
     return ARTIFACTS_DIR / "e2e" / "arxiv" / "daily" / month / day
@@ -674,17 +1056,22 @@ def _write_default_review_artifacts(
     args: argparse.Namespace,
     report_dir: Path,
     candidate_papers: list[Paper],
+    output_dir: Path | None = None,
+    resume_dir: Path | None = None,
 ) -> LlmRecommendationReviewResult | None:
     if not _should_write_default_review(args):
         return None
+    review_output_dir = output_dir or _review_output_dir()
     try:
         return LlmRecommendationReviewer().review(
             LlmRecommendationReviewRequest(
                 source_name="arXiv",
                 content_date=args.subscription_date,
                 report_dir=report_dir,
-                output_dir=_review_output_dir(),
+                output_dir=review_output_dir,
                 candidate_papers=candidate_papers,
+                candidate_batch_size=_validated_report_batch_size(args),
+                resume_dir=resume_dir,
                 progress=emit_progress,
             )
         )
@@ -692,7 +1079,7 @@ def _write_default_review_artifacts(
         write_review_failure_artifact(
             source_name="arXiv",
             content_date=args.subscription_date,
-            output_dir=_review_output_dir(),
+            output_dir=review_output_dir,
             message=str(exc),
         )
         return None
@@ -759,6 +1146,8 @@ def _build_merged_recommendation_sections(
 ) -> dict[str, list[dict[str, object]]]:
     red_rows = _list_dicts(red_report_payload.get("papers"))
     red_by_id = {str(row.get("paper_id", "")): row for row in red_rows}
+    candidate_rows = _list_dicts(red_report_payload.get("candidate_papers"))
+    candidate_by_id = {str(row.get("paper_id", "")): row for row in candidate_rows}
     borderline = _list_dicts(review_payload.get("borderline_recommendations"))
     borderline_ids = {str(item.get("paper_id", "")) for item in borderline}
     false_positive = _list_dicts(review_payload.get("false_positives"))
@@ -775,7 +1164,10 @@ def _build_merged_recommendation_sections(
         for item in borderline
     ]
     missed = [
-        _merged_missed_item(item)
+        _merged_missed_item(
+            item,
+            candidate_by_id.get(str(item.get("paper_id", "")), {}),
+        )
         for item in _list_dicts(review_payload.get("missed_recommendations"))
     ]
     return {
@@ -794,6 +1186,9 @@ def _merged_red_blue_item(
     return {
         "paper_id": paper_id,
         "title": red_row.get("title", ""),
+        "abstract": red_row.get("abstract", ""),
+        "authors": red_row.get("authors", ""),
+        "tags": red_row.get("tags", ""),
         "category": red_row.get("sampled_reason", ""),
         "red_reason": _compact_red_reason(red_row),
         "blue_verdict": review_item.get("verdict", "keep") if review_item else "keep",
@@ -803,13 +1198,20 @@ def _merged_red_blue_item(
     }
 
 
-def _merged_missed_item(item: dict[str, object]) -> dict[str, object]:
+def _merged_missed_item(
+    item: dict[str, object],
+    candidate_row: dict[str, object],
+) -> dict[str, object]:
     return {
         "paper_id": item.get("paper_id", ""),
         "title": item.get("title", ""),
+        "abstract": candidate_row.get("abstract", ""),
+        "authors": candidate_row.get("authors", ""),
+        "tags": candidate_row.get("tags", ""),
         "category": item.get("category", ""),
         "blue_reason": item.get("reason", ""),
         "confidence": item.get("confidence", ""),
+        "pdf_url": candidate_row.get("pdf_url", ""),
     }
 
 
@@ -906,34 +1308,51 @@ def _render_merged_items(
     if not items:
         return ["- 无"]
     lines: list[str] = []
-    for item in items:
-        line = (
-            f"- `{item.get('paper_id', '')}` {item.get('title', '')}"
-            f" | {item.get('category', '')}"
-        )
+    for index, item in enumerate(items, start=1):
+        lines.append(f"### {index}. {item.get('title', '')}")
+        lines.append(f"- 论文 ID：`{item.get('paper_id', '')}`")
+        if item.get("authors"):
+            lines.append(f"- 作者：{item.get('authors', '')}")
+        if item.get("tags"):
+            lines.append(f"- 主题标签：{item.get('tags', '')}")
+        lines.append(f"- 推荐类别：{item.get('category', '') or '未分类'}")
+        if item.get("abstract"):
+            lines.append(f"- 摘要：{item.get('abstract', '')}")
         if item.get("red_reason"):
-            line += f" | 红军：{item.get('red_reason')}"
+            lines.append(f"- 红军推荐依据：{item.get('red_reason')}")
         if include_blue_reason and item.get("blue_reason"):
-            line += (
-                f" | 蓝军：{item.get('blue_reason')}"
+            lines.append(
+                f"- 蓝军意见：{item.get('blue_reason')}"
                 f"（confidence={item.get('confidence', '')}）"
             )
-        lines.append(line)
+        if item.get("pdf_url"):
+            lines.append(f"- 链接：PDF: {item.get('pdf_url', '')}")
+        lines.append("")
     return lines
 
 
 def _render_missed_items(items: list[dict[str, object]]) -> list[str]:
     if not items:
         return ["- 无"]
-    return [
-        (
-            f"- `{item.get('paper_id', '')}` {item.get('title', '')}"
-            f" | {item.get('category', '')}"
-            f" | 蓝军：{item.get('blue_reason', '')}"
+    lines: list[str] = []
+    for index, item in enumerate(items, start=1):
+        lines.append(f"### {index}. {item.get('title', '')}")
+        lines.append(f"- 论文 ID：`{item.get('paper_id', '')}`")
+        if item.get("authors"):
+            lines.append(f"- 作者：{item.get('authors', '')}")
+        if item.get("tags"):
+            lines.append(f"- 主题标签：{item.get('tags', '')}")
+        lines.append(f"- 推荐类别：{item.get('category', '') or '未分类'}")
+        if item.get("abstract"):
+            lines.append(f"- 摘要：{item.get('abstract', '')}")
+        lines.append(
+            f"- 蓝军漏推荐依据：{item.get('blue_reason', '')}"
             f"（confidence={item.get('confidence', '')}）"
         )
-        for item in items
-    ]
+        if item.get("pdf_url"):
+            lines.append(f"- 链接：PDF: {item.get('pdf_url', '')}")
+        lines.append("")
+    return lines
 
 
 def _render_merged_report_stdout(

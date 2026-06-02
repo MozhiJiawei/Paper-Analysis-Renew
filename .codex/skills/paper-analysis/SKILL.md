@@ -31,6 +31,7 @@ description: "Use when working in this repository on conference paper filtering,
 - `py -m paper_analysis.cli.main conference --help`
 - `py -m paper_analysis.cli.main arxiv --help`
 - `py -m paper_analysis.cli.main arxiv report --subscription-date 2026-04/04-10 --deliver-subscription`
+- `py -m paper_analysis.cli.main arxiv report --subscription-date 2026-04/04-10 --fetch-all --batch-size 100`
 - `py -m paper_analysis.cli.main arxiv import-dataset --subscription-date 2026-04/04-10`
 - `py -m paper_analysis.cli.main quality send-test-email`
 - `py -m paper_analysis.cli.main quality lint`
@@ -62,6 +63,8 @@ description: "Use when working in this repository on conference paper filtering,
 - arXiv 链路优先复用 `arxiv` 命名空间，不在入口层做新的偏好产品面
 - arXiv 默认先抓取候选，再输出过滤后的推荐结果
 - arXiv 大模型审阅在 `arxiv report` 订阅邮件模式下默认执行，复用本次已加载候选集合和 OpenRouter `deepseek/deepseek-v4-pro`，检查误推荐、边界推荐与漏推荐，并把蓝军结论写回每日推荐报告；日更全量审阅使用 `--fetch-all`
+- arXiv 订阅邮件 `--fetch-all` 默认按批次推进，批大小默认 `--batch-size 100`；同一条命令可重复运行续跑，游标在分日目录 `workflow-state.json`
+- arXiv 全量推荐与蓝军审阅全部完成前不得把中间报告当成最终交付；只有分日目录下 `final-summary.md` / `final-result.json` 等 `final-*` 产物存在时，才允许发布到 GitHub Issue
 - arXiv 数据集导入默认不随 `arxiv report` 自动执行；只有显式执行 `arxiv import-dataset` 时才写入子仓数据集
 - arXiv 订阅默认使用 Gmail 订阅邮件；自然语言路由不要主动补 `--source-mode subscription-api`
 - 质量检查默认运行 `quality local-ci`

@@ -138,6 +138,8 @@ py -m paper_analysis.cli.main conference report --venue iclr --year 2025 --paper
 - “推荐”不是独立产品面
 - arXiv 默认先抓取候选，再输出过滤后的推荐结果
 - arXiv 大模型审阅在 `arxiv report` 订阅邮件模式下默认执行，复用本次已加载候选集合和 OpenRouter `deepseek/deepseek-v4-pro`，并把蓝军结论写回每日推荐报告；日更全量审阅使用 `--fetch-all`
+- arXiv 订阅邮件 `--fetch-all` 默认按 `--batch-size 100` 分批推进；重复运行同一命令会按分日目录 `workflow-state.json` 续跑
+- arXiv 全量最终报告以分日目录 `final-*` 产物为准；`final-summary.md` / `final-result.json` 缺失时表示流程未完成，GitHub Issue 发布只能提醒继续续跑
 - arXiv 订阅邮件日更默认不入库；只有显式执行 `arxiv import-dataset --subscription-date <YYYY-MM/MM-DD>` 时，才读取同一个分日目录下的推荐报告与蓝军审阅产物，并把推荐结果、蓝军校验结果、ds-v4 边界负例抽样导入 `third_party/paper_analysis_dataset` 的现有导入 API
 - 手动数据集导入用于人工确认后的样本沉淀，避免推荐算法或蓝军算法噪音直接增加人工审阅成本
 - `--deliver-subscription` 只允许在 `subscription-api` 或 `subscription-email` 模式下执行真实投递

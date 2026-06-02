@@ -368,6 +368,60 @@ class LlmRecommendationReviewerTests(unittest.TestCase):
         self.assertIn("[blue-team] reviewing omitted batch 2/2, size=1...", progress_lines)
         self.assertTrue(any(line.startswith("[blue-team] done ") for line in progress_lines))
 
+    def test_review_resumes_completed_omitted_batches(self) -> None:
+        report_dir, output_dir = _write_report_dirs("resume-omitted")
+        resume_dir = ROOT_DIR / "artifacts" / "test-output" / "arxiv-llm-review-resume-state"
+        if resume_dir.exists():
+            shutil.rmtree(resume_dir)
+        batch_dir = resume_dir / "omitted-batches"
+        batch_dir.mkdir(parents=True)
+        (batch_dir / "batch-000001.json").write_text(
+            json.dumps(
+                {
+                    "recommended_reviews": [],
+                    "missed_recommendations": [
+                        {
+                            "paper_id": "p2",
+                            "category": "系统与调度优化",
+                            "confidence": 0.8,
+                            "reason": "已完成的第一批漏推荐。",
+                        }
+                    ],
+                    "batch_index": 1,
+                    "batch_size": 1,
+                },
+                ensure_ascii=False,
+            ),
+            encoding="utf-8",
+        )
+        candidates = [
+            _paper("p1", "Recommended", "A recommended paper."),
+            _paper("p2", "Omitted 1", "An omitted paper."),
+            _paper("p3", "Omitted 2", "Another omitted paper."),
+        ]
+        progress_lines: list[str] = []
+        client = FakeOpenRouterClient()
+
+        LlmRecommendationReviewer(client=cast(Any, client)).review(
+            LlmRecommendationReviewRequest(
+                source_name="arXiv",
+                content_date="2026-05/05-24",
+                report_dir=report_dir,
+                output_dir=output_dir,
+                candidate_batch_size=1,
+                candidate_papers=candidates,
+                resume_dir=resume_dir,
+                progress=progress_lines.append,
+            )
+        )
+
+        self.assertIn(
+            "[blue-team] omitted batch 1/2 resumed, first_pass_missed=1",
+            progress_lines,
+        )
+        self.assertIn("[blue-team] reviewing omitted batch 2/2, size=1...", progress_lines)
+        self.assertTrue((batch_dir / "batch-000002.json").exists())
+
     def test_review_closes_owned_openrouter_client(self) -> None:
         report_dir, output_dir = _write_report_dirs("owned-client-close")
         candidates = [

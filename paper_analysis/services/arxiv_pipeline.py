@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections import Counter
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
@@ -16,7 +17,7 @@ from paper_analysis.sources.arxiv.email_loader import load_subscription_email_pa
 from paper_analysis.sources.arxiv.subscription_loader import load_subscription_papers
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
+    from collections.abc import Callable, Sequence
     from pathlib import Path
 
     from paper_analysis.domain.paper import Paper
@@ -107,8 +108,12 @@ class ArxivPipeline:
                 progress,
                 f"[arxiv] enriching affiliations for {len(selected_papers)} selected papers...",
             )
-            enrich_selected_arxiv_papers_with_affiliations(selected_papers)
-            _emit_progress(progress, "[arxiv] affiliation enrichment done")
+            enrichment_results = enrich_selected_arxiv_papers_with_affiliations(selected_papers)
+            _emit_progress(
+                progress,
+                f"[arxiv] affiliation enrichment done: "
+                f"{_format_enrichment_statuses(enrichment_results)}",
+            )
         return self.Result(
             papers=selected_papers,
             preferences=preferences,
@@ -159,3 +164,8 @@ class ArxivPipeline:
 def _emit_progress(progress: Callable[[str], None] | None, line: str) -> None:
     if progress:
         progress(line)
+
+
+def _format_enrichment_statuses(results: Sequence[object]) -> str:
+    statuses = Counter(str(getattr(result, "status", "unknown")) for result in results)
+    return "，".join(f"{status}={count}" for status, count in sorted(statuses.items())) or "none"

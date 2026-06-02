@@ -25,14 +25,48 @@ class ArxivBlueTeamReportTests(unittest.TestCase):
                             {
                                 "paper_id": "p1",
                                 "title": "Speculative Decoding",
+                                "abstract": "A decoding method that improves LLM latency.",
+                                "authors": "Ada",
+                                "tags": "cs.CL",
+                                "pdf_url": "https://arxiv.org/pdf/p1",
                                 "sampled_reason": "解码策略优化",
                                 "reasons": ["推理加速子类：解码策略优化"],
                             },
                             {
                                 "paper_id": "p2",
                                 "title": "KV Cache Scheduling",
+                                "abstract": "A cache scheduler for efficient long-context serving.",
+                                "authors": "Bob",
+                                "tags": "cs.LG",
+                                "pdf_url": "https://arxiv.org/pdf/p2",
                                 "sampled_reason": "上下文与缓存优化",
                                 "reasons": ["推理加速子类：上下文与缓存优化"],
+                            },
+                        ],
+                        "candidate_papers": [
+                            {
+                                "paper_id": "p1",
+                                "title": "Speculative Decoding",
+                                "abstract": "A decoding method that improves LLM latency.",
+                                "authors": "Ada",
+                                "tags": "cs.CL",
+                                "pdf_url": "https://arxiv.org/pdf/p1",
+                            },
+                            {
+                                "paper_id": "p2",
+                                "title": "KV Cache Scheduling",
+                                "abstract": "A cache scheduler for efficient long-context serving.",
+                                "authors": "Bob",
+                                "tags": "cs.LG",
+                                "pdf_url": "https://arxiv.org/pdf/p2",
+                            },
+                            {
+                                "paper_id": "p3",
+                                "title": "Paged KV Serving",
+                                "abstract": "A paged KV serving system that reduces memory pressure.",
+                                "authors": "Chen",
+                                "tags": "cs.DC",
+                                "pdf_url": "https://arxiv.org/pdf/p3",
                             },
                         ],
                     },
@@ -99,10 +133,14 @@ class ArxivBlueTeamReportTests(unittest.TestCase):
 
         self.assertIn("## 1. 蓝军推荐 + 红军推荐", markdown)
         self.assertIn("Speculative Decoding", markdown)
+        self.assertIn("摘要：A decoding method that improves LLM latency.", markdown)
+        self.assertIn("链接：PDF: https://arxiv.org/pdf/p1", markdown)
         self.assertIn("## 2. 红军推荐 + 蓝军存疑", markdown)
         self.assertIn("KV Cache Scheduling", markdown)
         self.assertIn("## 3. 蓝军漏推荐", markdown)
         self.assertIn("Paged KV Serving", markdown)
+        self.assertIn("摘要：A paged KV serving system that reduces memory pressure.", markdown)
+        self.assertIn("链接：PDF: https://arxiv.org/pdf/p3", markdown)
         self.assertIn("红军主报告：`red-team-summary.md`", markdown)
         self.assertIn("蓝军审阅报告：`review-summary.md`", markdown)
         self.assertEqual("completed", payload["blue_team_review"]["status"])

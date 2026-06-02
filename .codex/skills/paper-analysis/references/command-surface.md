@@ -35,6 +35,8 @@ py -m paper_analysis.cli.main <namespace> <action> [options]
 ## arXiv 数据集导入
 
 - `arxiv report --subscription-date YYYY-MM/MM-DD` 默认只生成推荐报告和蓝军审阅，不写入数据集
+- `arxiv report --subscription-date YYYY-MM/MM-DD --fetch-all` 默认按批次续跑，批大小默认 `--batch-size 100`，游标写入分日目录 `workflow-state.json`
+- 全量模式只有推荐和蓝军审阅全部完成后才生成 `final-summary.md` / `final-result.json` 等 `final-*` 产物；GitHub Issue 发布只能消费这些最终报告
 - 手动执行 `arxiv import-dataset --subscription-date YYYY-MM/MM-DD` 才会读取同一个分日目录下的推荐报告/蓝军审阅产物，写入 `artifacts/datasets/arxiv/latest/import-payload.json`，并调用子仓 `paper-analysis-dataset-import-samples`
 - 分日目录为 `artifacts/e2e/arxiv/daily/YYYY-MM/MM-DD/`，同时包含 `summary.md` / `result.json` 和 `review-summary.md` / `review-result.json`
 - 如果分日目录中的推荐报告或蓝军审阅文件不存在，直接失败并提示先重跑 `arxiv report --subscription-date YYYY-MM/MM-DD --fetch-all`

@@ -72,6 +72,8 @@ class CliHelpTests(unittest.TestCase):
         self.assertIn("--source-mode", result.stdout)
         self.assertIn("--subscription-date", result.stdout)
         self.assertIn("--max-results", result.stdout)
+        self.assertIn("--batch-size", result.stdout)
+        self.assertIn("--reset-progress", result.stdout)
 
     def test_quality_help_lists_stable_quality_commands(self) -> None:
         """验证 quality 命令面保留稳定入口，并移除旧 typecheck 子命令。"""

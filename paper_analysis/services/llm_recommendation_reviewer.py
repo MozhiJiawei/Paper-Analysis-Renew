@@ -84,6 +84,7 @@ class LlmRecommendationReviewRequest:
     candidate_batch_size: int = 10
     review_concurrency: int = DEFAULT_REVIEW_CONCURRENCY
     model: str = DEFAULT_CHAT_MODEL
+    resume_dir: Path | None = None
     progress: Callable[[str], None] | None = None
 
 
@@ -187,6 +188,7 @@ class LlmRecommendationReviewer:
             schema_description=schema_description,
             omitted_rows=omitted_rows,
             batch_size=request.candidate_batch_size,
+            resume_dir=request.resume_dir,
             progress=request.progress,
         )
         _validate_omitted_payloads(
@@ -281,12 +283,33 @@ class LlmRecommendationReviewer:
         schema_description: str,
         omitted_rows: list[dict[str, Any]],
         batch_size: int,
+        resume_dir: Path | None,
         progress: Callable[[str], None] | None,
     ) -> list[dict[str, Any]]:
         payloads: list[dict[str, Any]] = []
         batches = _chunk_rows(omitted_rows, batch_size)
         total_batches = len(batches)
+        batch_dir = resume_dir / "omitted-batches" if resume_dir else None
+        if batch_dir:
+            batch_dir.mkdir(parents=True, exist_ok=True)
         for batch_index, batch in enumerate(batches, start=1):
+            batch_path = batch_dir / f"batch-{batch_index:06d}.json" if batch_dir else None
+            if batch_path and batch_path.exists():
+                try:
+                    payload = json.loads(batch_path.read_text(encoding="utf-8"))
+                except json.JSONDecodeError:
+                    batch_path.unlink()
+                else:
+                    if isinstance(payload, dict):
+                        payloads.append(payload)
+                        missed_count = len(_list_dicts(payload.get("missed_recommendations")))
+                        _emit_progress(
+                            progress,
+                            "[blue-team] omitted batch "
+                            f"{batch_index}/{total_batches} resumed, "
+                            f"first_pass_missed={missed_count}",
+                        )
+                        continue
             _emit_progress(
                 progress,
                 "[blue-team] reviewing omitted batch "
@@ -321,6 +344,11 @@ class LlmRecommendationReviewer:
             )
             payload["batch_index"] = batch_index
             payload["batch_size"] = len(batch)
+            if batch_path:
+                batch_path.write_text(
+                    json.dumps(payload, ensure_ascii=False, indent=2),
+                    encoding="utf-8",
+                )
             payloads.append(payload)
             missed_count = len(_list_dicts(payload.get("missed_recommendations")))
             _emit_progress(
